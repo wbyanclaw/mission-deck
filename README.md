@@ -2,6 +2,11 @@
 
 `mission-deck` is a non-invasive OpenClaw plugin for multi-agent orchestration guardrails and a lightweight standalone dashboard.
 
+Language:
+
+- English: `README.md`
+- 简体中文: [README.zh-CN.md](./README.zh-CN.md)
+
 Official companion skill:
 
 - `skills/mission-deck-autonomy/` provides generic multi-agent routing, TaskFlow escalation, and completion guardrails without requiring edits to user workspace prompt files.
