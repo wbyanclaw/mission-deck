@@ -1,0 +1,47 @@
+{
+  "name": "mission-deck-install",
+  "version": "0.1.0",
+  "description": "Agent-first installer package for the mission-deck OpenClaw plugin and its bundled autonomy skill.",
+  "license": "MIT",
+  "type": "module",
+  "main": "index.js",
+  "bin": {
+    "mission-deck-install": "bin/mission-deck-install.js"
+  },
+  "exports": {
+    ".": "./index.js"
+  },
+  "files": [
+    "bin",
+    "index.js",
+    "lib",
+    "dashboard/index.html",
+    "dashboard/app.js",
+    "dashboard/styles.css",
+    "skills",
+    "openclaw.plugin.json",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "keywords": [
+    "openclaw",
+    "plugin",
+    "installer",
+    "orchestration",
+    "multi-agent",
+    "dashboard",
+    "taskflow",
+    "skill"
+  ],
+  "scripts": {
+    "check": "node --check index.js && node --check bin/mission-deck-install.js && node --check lib/orchestrator-helpers.js && node --check lib/dashboard-store.js && node --check dashboard/app.js",
+    "test": "node --test",
+    "prepack": "npm run check && npm test",
+    "pack:inspect": "npm pack --json"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

@@ -1,0 +1,72 @@
+{
+  "id": "mission-deck",
+  "name": "MISSION DECK",
+  "description": "Configuration-driven multi-agent orchestration guardrails with TaskFlow-aware delegation tracing and dashboard outputs.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabledAgents": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "internalFirst": {
+        "type": "boolean"
+      },
+      "blockPrematureUserEscalation": {
+        "type": "boolean"
+      },
+      "blockPrematureSpawn": {
+        "type": "boolean"
+      },
+      "blockInvalidSessionsSend": {
+        "type": "boolean"
+      },
+      "redactDashboardContent": {
+        "type": "boolean"
+      },
+      "redactSessionKeys": {
+        "type": "boolean"
+      },
+      "redactPromptMetadata": {
+        "type": "boolean"
+      },
+      "taskKeywords": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "agentWorkspaceRoots": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "entrypointPatterns": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "discoveryToolNames": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
+      "dashboardRetentionDays": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "dashboardStatusPath": {
+        "type": "string"
+      },
+      "dashboardDataDir": {
+        "type": "string"
+      }
+    }
+  }
+}

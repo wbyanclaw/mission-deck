@@ -1,0 +1,4 @@
+dashboard/status.json
+dashboard/data/
+node_modules/
+*.tgz

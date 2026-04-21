@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MISSION DECK</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="page">
+      <header class="hero">
+        <div>
+          <div class="eyebrow">MISSION DECK | 多 Agent 总控台</div>
+          <h1>任务入场，飞轮启航：多 Agent 协同，3W3C 闭环交付</h1>
+          <p id="heroSub" class="sub">由 OpenClaw 强力驱动，正在读取当前智体编组与协同关系。</p>
+        </div>
+        <div class="hero-side">
+          <div id="generatedAt" class="generated">更新时间：-</div>
+          <div id="heartbeat" class="heartbeat">实时心跳：-</div>
+        </div>
+      </header>
+
+      <section class="section">
+        <div class="section-head">
+          <h2>总览</h2>
+        </div>
+        <div id="summary" class="summary-grid"></div>
+      </section>
+
+      <section class="workspace">
+        <div class="main-column">
+          <section class="section">
+            <div class="section-head">
+              <h2>组织架构</h2>
+              <span class="hint">展示当前分工关系与任务安排</span>
+            </div>
+            <div id="graph" class="graph-card"></div>
+          </section>
+
+          <section class="section">
+            <div class="section-head">
+              <h2>任务状态</h2>
+              <span id="task-count" class="hint">0 项</span>
+            </div>
+            <div id="timeline" class="timeline"></div>
+          </section>
+        </div>
+
+        <aside class="side-column">
+          <section class="section">
+            <div class="section-head">
+              <h2>Agent 状态</h2>
+              <span class="hint">能力、队列、心跳</span>
+            </div>
+            <div id="agents" class="agents-grid sidebar-agents"></div>
+          </section>
+        </aside>
+      </section>
+    </main>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>
