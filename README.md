@@ -2,6 +2,13 @@
 
 `mission-deck` is a non-invasive OpenClaw plugin for multi-agent orchestration guardrails and a lightweight standalone dashboard.
 
+Current architecture:
+
+- hooks act as event adapters, not the durable workflow engine
+- `TaskFlow` is the only durable flow state source for `mission-flow`
+- child-task evidence is reconciled back into the root flow before final delivery
+- final user-visible delivery is gated through one durable finalize path
+
 Language:
 
 - English: `README.md`
@@ -35,14 +42,47 @@ If you are unsure, inspect visible sessions first with `sessions_list` or `agent
 
 ## What It Does
 
+- Classifies work as `plain`, `mission-lite`, or `mission-flow`
 - Detects engineering-style tasks from prompt behavior
 - Pushes agents toward internal coordination before external narration
 - Blocks invalid `sessions_send` calls that target only `agentId`
 - Blocks premature `sessions_spawn` unless isolation is explicit or no visible reusable session is available
 - Creates and maintains TaskFlow-linked delegation traces on supported hosts
 - Tracks child-task linkage for traceable delegation
+- Reconciles child-task delivery back into the root flow before completion
+- Treats synthetic announce text as supporting input, not as an independent completion source
 - Writes a live dashboard snapshot to `dashboard/status.json`
 - Appends daily dashboard events to `dashboard/data/YYYY-MM-DD.jsonl`
+
+## Execution Modes
+
+`mission-deck` uses three entry modes:
+
+- `plain`: direct handling, no orchestration flow
+- `mission-lite`: lightweight planning and guardrails without durable `TaskFlow`
+- `mission-flow`: durable multi-agent orchestration with child-task evidence and completion gates
+
+Typical rule of thumb:
+
+- simple direct work -> `plain`
+- solo but non-trivial work -> `mission-lite`
+- delegated or stateful work -> `mission-flow`
+
+## Durable Flow Rules
+
+For `mission-flow`, the plugin enforces these rules:
+
+- the root flow owns durable status
+- child work is tracked as child tasks linked to the root flow
+- child completion must be reflected back into root flow evidence
+- final delivery is only valid after the root flow has enough evidence and no open child work
+
+This is the main reason `mission-deck` separates:
+
+- hook adapters
+- flow transitions
+- parent reconciliation
+- reply/finalize gates
 
 ## Compatibility
 
@@ -197,6 +237,18 @@ Use `sessions_spawn` when:
 - no visible reusable teammate session exists
 
 `sessions_send` is not valid when only `agentId` is provided. A known `sessionKey` or `label` is required.
+
+## Completion Model
+
+`mission-deck` does not treat any one reply as proof of completion by itself.
+
+Completion is valid only when:
+
+- the root flow has durable child evidence when delegation was required
+- no open child work remains
+- the root flow can pass its finalize gate
+
+Synthetic announce messages are treated as child-report inputs. They do not independently close the workflow.
 
 ## Dashboard
 

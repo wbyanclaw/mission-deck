@@ -14,6 +14,7 @@ Use this skill when the host already has multi-agent messaging and TaskFlow-styl
 - Decide when a task must enter `TaskFlow`
 - Keep completion standards consistent across agents
 - Keep user-facing updates short and stateful
+- Treat the root flow as the only durable completion source
 
 ## What This Skill Must Not Assume
 
@@ -30,6 +31,12 @@ Use this skill when the host already has multi-agent messaging and TaskFlow-styl
 4. Assign execution/research/review responsibilities by capability.
 5. If the task is long-running or stateful, use `TaskFlow` as the only durable status source.
 6. Do not claim completion without result evidence.
+
+Architecture rule:
+
+- hook-level narration is not the durable workflow truth
+- the root `TaskFlow` is the durable truth for `mission-flow`
+- child replies and synthetic announce messages are inputs to the root flow, not independent completion paths
 
 ## Task Classes
 
@@ -81,6 +88,7 @@ Handling:
 - keep current phase, next phase, risk, and ETA current
 - treat TaskFlow as the only durable state source
 - require result evidence before completion
+- reconcile child outcomes back into the root flow before final delivery
 
 ## Mode Discipline
 
@@ -111,6 +119,7 @@ Minimum rules:
 - if files or systems changed, include validation or an explicit blocker
 - a waiting task is not complete just because one visible reply looks final
 - open child work means the parent is still active unless the runtime explicitly records completion
+- a child report is not itself final delivery; it must be absorbed by the root flow first
 
 ## User Update Rules
 

@@ -2,6 +2,13 @@
 
 `mission-deck` 是一个非侵入式的 OpenClaw 插件，用于提供多 Agent 协作护栏，以及一个轻量级的独立静态 dashboard。
 
+当前架构原则：
+
+- hooks 只做事件适配，不承担 durable workflow 主状态机
+- `TaskFlow` 是 `mission-flow` 的唯一 durable flow 状态源
+- child task 的结果必须先回灌 root flow，再允许最终交付
+- 对用户的最终回复必须经过统一 finalize gate
+
 官方配套 skill：
 
 - `skills/mission-deck-autonomy/` 提供通用的多 Agent 路由、TaskFlow 升级策略和完成标准，不要求修改用户自己的 workspace 提示文件。
@@ -30,14 +37,47 @@
 
 ## 功能说明
 
+- 按 `plain`、`mission-lite`、`mission-flow` 三层入口分类任务
 - 根据 prompt 行为识别工程型任务
 - 推动 agent 在对外叙述前先做内部协调
 - 阻止只靠 `agentId` 的无效 `sessions_send`
 - 阻止过早的 `sessions_spawn`，除非明确需要隔离，或没有可复用会话
 - 在宿主支持的情况下创建并维护与 TaskFlow 绑定的 delegation trace
 - 记录 child-task 链路，保证交接可追踪
+- 在完成前把 child-task 证据回灌到 root flow
+- 将 synthetic announce 视为 child-report 输入，而不是独立完成出口
 - 将实时 dashboard 快照写入 `dashboard/status.json`
 - 将每日 dashboard 事件追加到 `dashboard/data/YYYY-MM-DD.jsonl`
+
+## 执行模式
+
+`mission-deck` 使用三层入口：
+
+- `plain`：直接处理，不建立编排 flow
+- `mission-lite`：轻量规划和护栏，但不上 durable `TaskFlow`
+- `mission-flow`：durable 多 Agent 编排，要求 child evidence 和 completion gate
+
+经验规则：
+
+- 简单直接问题 -> `plain`
+- 中等复杂但仍可 solo 完成 -> `mission-lite`
+- 需要委派或需要持久状态 -> `mission-flow`
+
+## Durable Flow 规则
+
+对 `mission-flow`，插件遵循这些规则：
+
+- root flow 持有 durable 状态
+- child work 以 child task 形式挂在 root flow 上
+- child 完成结果必须回写 root flow evidence
+- 只有证据满足且没有未完成 child work，才允许最终交付
+
+这也是当前代码结构为什么会明确拆成：
+
+- hook adapters
+- flow transitions
+- parent reconciliation
+- reply/finalize gates
 
 ## 兼容性
 
@@ -192,6 +232,18 @@ mission-deck-install --apply --with-skill --verify --restart --json
 - 没有合适的可复用 teammate 会话
 
 如果只提供 `agentId`，`sessions_send` 并不成立；必须已知 `sessionKey` 或 `label`。
+
+## 完成模型
+
+`mission-deck` 不会把任何单条回复直接当成“已完成”的最终证据。
+
+只有同时满足下面条件，才算真正完成：
+
+- 对需要委派的任务，root flow 已经拿到 durable child evidence
+- 没有未关闭的 child work
+- root flow 通过 finalize gate
+
+synthetic announce 只会作为 child-report 输入，不会自己独立闭环。
 
 ## Dashboard
 
