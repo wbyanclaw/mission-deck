@@ -120,3 +120,41 @@ test("applyDurableFlowToRun copies canonical flow state into runtime snapshot", 
   assert.equal(run.parentRunId, "parent-1");
   assert.equal(run.childTaskIds[0], "task-1");
 });
+
+test("applyDurableFlowToRun reconciles child task evidence from flow task details", () => {
+  const run = __test__.defaultRunState();
+  const flow = {
+    flowId: "flow-1",
+    revision: 4,
+    status: "waiting",
+    currentStep: "waiting_child",
+    stateJson: {
+      state: "waiting_child",
+      childTasks: [
+        {
+          taskId: "task-child-1",
+          agentId: "builder",
+          childSessionKey: "agent:builder:subagent:1",
+          childRunId: "run-child-1",
+          phase: "running"
+        }
+      ],
+      receivedEvidenceCount: 0
+    },
+    tasks: [
+      {
+        id: "task-child-1",
+        agentId: "builder",
+        childSessionKey: "agent:builder:subagent:1",
+        runId: "run-child-1",
+        status: "succeeded",
+        deliveryStatus: "delivered",
+        progressSummary: "build fixed"
+      }
+    ]
+  };
+  __test__.applyDurableFlowToRun(run, flow);
+  assert.equal(run.childTasks[0].phase, "delivered");
+  assert.equal(run.durable.receivedEvidenceCount, 1);
+  assert.equal(run.childTasks[0].progressSummary, "build fixed");
+});
