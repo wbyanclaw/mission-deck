@@ -9,7 +9,7 @@ Use this skill when the host already has multi-agent messaging and TaskFlow-styl
 
 ## What This Skill Covers
 
-- Classify work as `direct`, `orchestrated`, or `taskflow`
+- Classify work as `plain`, `mission-lite`, or `mission-flow`
 - Choose roles by capability, not by fixed agent ids
 - Decide when a task must enter `TaskFlow`
 - Keep completion standards consistent across agents
@@ -25,7 +25,7 @@ Use this skill when the host already has multi-agent messaging and TaskFlow-styl
 ## Core Workflow
 
 1. Inspect the available agents and infer capability buckets.
-2. Classify the task as `direct`, `orchestrated`, or `taskflow`.
+2. Classify the task as `plain`, `mission-lite`, or `mission-flow`.
 3. Assign one coordinator when the work is not purely direct.
 4. Assign execution/research/review responsibilities by capability.
 5. If the task is long-running or stateful, use `TaskFlow` as the only durable status source.
@@ -33,7 +33,7 @@ Use this skill when the host already has multi-agent messaging and TaskFlow-styl
 
 ## Task Classes
 
-### `direct`
+### `plain`
 
 Use when most of these are true:
 
@@ -45,25 +45,26 @@ Use when most of these are true:
 
 Handling:
 
-- send directly to the best executor
-- return the result when done
+- complete directly in the current run
+- do not create TaskFlow
+- do not force orchestration metadata beyond minimal local reasoning
 
-### `orchestrated`
+### `mission-lite`
 
 Use when any of these are true:
 
-- multiple agents are needed
-- there are ordered steps
-- one agent should own the summary back to the user
-- multiple sub-items need parallel progress
+- the task benefits from a short execution plan first
+- the current agent should inspect context or explain likely next steps
+- orchestration metadata is useful, but durable status is not yet needed
+- no real delegation has happened yet
 
 Handling:
 
-- choose one coordinator
-- coordinator delegates bounded subtasks
-- keep user updates to major milestones only
+- create a lightweight plan first
+- keep the current agent in control
+- upgrade to `mission-flow` immediately once a real delegation or durable wait is needed
 
-### `taskflow`
+### `mission-flow`
 
 Use when any two of these are true:
 
@@ -79,6 +80,13 @@ Handling:
 - create or continue one durable TaskFlow
 - keep current phase, next phase, risk, and ETA current
 - treat TaskFlow as the only durable state source
+- require result evidence before completion
+
+## Mode Discipline
+
+- `plain`: answer directly; do not add orchestration overhead
+- `mission-lite`: plan first, then act; keep it lightweight until a real delegation occurs
+- `mission-flow`: create or continue durable flow state, link child evidence, and enforce completion gates
 
 ## Role Selection
 

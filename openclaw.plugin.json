@@ -12,8 +12,21 @@
           "type": "string"
         }
       },
+      "coordinatorAgentId": {
+        "type": "string"
+      },
+      "codeExecutorAgentIds": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      },
       "internalFirst": {
         "type": "boolean"
+      },
+      "interventionIdleMinutes": {
+        "type": "integer",
+        "minimum": 1
       },
       "blockPrematureUserEscalation": {
         "type": "boolean"
@@ -66,6 +79,42 @@
       },
       "dashboardDataDir": {
         "type": "string"
+      },
+      "taskflowSupervisor": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "intervalMinutes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "maxConcurrent": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      },
+      "dashboardHttp": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "host": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
       }
     }
   }

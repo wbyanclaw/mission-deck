@@ -1,4 +1,5 @@
 const el = {
+  versionBadge: document.getElementById("versionBadge"),
   generatedAt: document.getElementById("generatedAt"),
   heartbeat: document.getElementById("heartbeat"),
   heroSub: document.getElementById("heroSub"),
@@ -9,6 +10,8 @@ const el = {
   taskCount: document.getElementById("task-count")
 };
 
+const DASHBOARD_VERSION = "v0.1.0+patch3";
+
 let lastGeneratedAt = "";
 let lastGoodData = null;
 const uiState = {
@@ -17,22 +20,22 @@ const uiState = {
 };
 
 const STATUS_TEXT = {
-  blocked: "Needs attention",
-  waiting: "In progress",
-  completed: "Completed",
-  delegated: "Delegated",
-  lane_open: "Lane opened",
-  coordinating: "Coordinating",
-  triaging: "Triaging",
-  non_engineering: "Other"
+  blocked: "需要关注",
+  waiting: "处理中",
+  completed: "已完成",
+  delegated: "已分派",
+  lane_open: "已建立处理通道",
+  coordinating: "协同中",
+  triaging: "分流中",
+  non_engineering: "其他"
 };
 
 const TARGET_KIND_TEXT = {
-  "persistent-channel-session": "Continue in an existing channel session",
-  "subagent-session": "Open a dedicated subagent lane",
-  "cron-session": "Continue in a scheduled lane",
-  "spawned-run": "Open a separate execution lane",
-  "existing-session": "Continue in an existing reusable session"
+  "persistent-channel-session": "继续当前 Channel Session",
+  "subagent-session": "新建专用 Subagent Session",
+  "cron-session": "在定时 Session 中继续处理",
+  "spawned-run": "新建隔离 Run 通道",
+  "existing-session": "复用已有 Session"
 };
 
 function fmtTime(value) {
@@ -43,21 +46,21 @@ function fmtTime(value) {
 }
 
 function timeAgo(value) {
-  if (!value) return "No heartbeat yet";
+  if (!value) return "暂无心跳";
   const diff = Math.max(0, Date.now() - new Date(value).getTime());
   const secs = Math.round(diff / 1000);
-  if (secs < 1) return "just now";
-  if (secs < 60) return `${secs}s ago`;
+  if (secs < 1) return "刚刚";
+  if (secs < 60) return `${secs} 秒前`;
   const mins = Math.round(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
+  if (mins < 60) return `${mins} 分钟前`;
   const hours = Math.round(mins / 60);
-  return `${hours}h ago`;
+  return `${hours} 小时前`;
 }
 
 function refreshHeartbeat() {
   el.heartbeat.textContent = lastGeneratedAt
-    ? `Heartbeat: ${timeAgo(lastGeneratedAt)}`
-    : "Heartbeat: -";
+    ? `实时心跳：${timeAgo(lastGeneratedAt)}`
+    : "实时心跳：-";
 }
 
 function esc(value) {
@@ -95,7 +98,10 @@ function shouldIgnoreSnapshot(data) {
 }
 
 function applyDashboard(data) {
-  el.generatedAt.textContent = `Updated: ${fmtTime(data.meta?.generatedAt)}`;
+  if (el.versionBadge) {
+    el.versionBadge.textContent = `Version: ${DASHBOARD_VERSION}`;
+  }
+  el.generatedAt.textContent = `更新时间：${fmtTime(data.meta?.generatedAt)}`;
   lastGeneratedAt = data.meta?.generatedAt || "";
   refreshHeartbeat();
   renderHero(data);
@@ -106,7 +112,7 @@ function applyDashboard(data) {
 }
 
 function getStatusText(status) {
-  return STATUS_TEXT[status] || "Active";
+  return STATUS_TEXT[status] || "活跃";
 }
 
 function fmtCompactNumber(value) {
@@ -132,15 +138,21 @@ function getLatestBlocker(run, data) {
     .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")))[0] || null;
 }
 
+function sortByTimestampAsc(items, pickTimestamp) {
+  return [...items].sort((a, b) =>
+    String(pickTimestamp(a) || "").localeCompare(String(pickTimestamp(b) || ""))
+  );
+}
+
 function getRouteLabel(target) {
-  return TARGET_KIND_TEXT[target?.targetKind] || "Internal collaboration in progress";
+  return TARGET_KIND_TEXT[target?.targetKind] || "正在进行内部协作";
 }
 
 function getRouteReason(target) {
-  if (!target) return "The task owner is still being determined.";
-  if (target.routeType === "send") return "The task continues in an existing conversation thread.";
-  if (target.routeType === "spawn") return "A separate execution lane was opened for isolated or parallel work.";
-  return "The task is currently moving through internal collaboration.";
+  if (!target) return "当前还在确认最合适的处理人。";
+  if (target.routeType === "send") return "任务沿用已有 Session 继续推进。";
+  if (target.routeType === "spawn") return "任务已新建独立 Run 通道，便于隔离或并行处理。";
+  return "任务当前正在内部协作链路中推进。";
 }
 
 function humanizeLatestDetail(run, latestBlocker) {
@@ -150,24 +162,24 @@ function humanizeLatestDetail(run, latestBlocker) {
 
   const status = String(run.lastToolStatus || "").toLowerCase();
   if (status === "sent" || status === "succeeded" || status === "success" || status === "accepted") {
-    return "Handoff completed and follow-up is in progress.";
+    return "交接已完成，后续动作正在推进。";
   }
   if (status === "running" || status === "in_progress" || status === "pending") {
-    return "A teammate is actively working on it.";
+    return "相关 Agent 正在处理中。";
   }
   if (status === "timeout" || status === "timed_out") {
-    return "The task has been waiting for a while and may need fresh input.";
+    return "等待时间较长，可能需要新的输入或继续跟进。";
   }
   if (status === "failed" || status === "error") {
-    return "The current route hit an error and needs another pass.";
+    return "当前处理链路遇到异常，需要重新跟进。";
   }
   if (status === "unknown") {
-    return "Follow-up was sent and the system is waiting for a result.";
+    return "已发出跟进动作，正在等待结果。";
   }
 
-  if (run.status === "blocked") return "The task is blocked and needs a decision or new input.";
-  if (run.lastEvent) return "The task is still active and the latest step has been recorded.";
-  return "The task is still progressing.";
+  if (run.status === "blocked") return "任务当前被阻塞，需要决策或新的输入。";
+  if (run.lastEvent) return "任务仍在推进，最新步骤已记录。";
+  return "任务仍在处理中。";
 }
 
 function getFlowStepText(run) {
@@ -225,16 +237,16 @@ function describeDecision(item, run) {
   if (item.externalMessage) return item.externalMessage;
   if (item.event === "before_prompt_build") {
     return run.suggestedSpawn?.agentId
-      ? `Selected ${run.suggestedSpawn.agentId} as the likely executor and prepared a lane handoff.`
-      : "Classified the request and prepared the next internal coordination step.";
+      ? `已将 ${run.suggestedSpawn.agentId} 识别为候选执行者，并准备交接执行通道。`
+      : "已完成任务分类，并准备进入下一步内部协作。";
   }
-  if (item.event === "workspace_discovery") return "Checked configured workspaces before asking the user for project entrypoints.";
-  if (item.event === "internal_coordination") return "Started internal coordination to find the best executor.";
-  if (item.event === "execution_lane_request") return "Requested a reusable session or a fresh execution lane.";
-  if (item.event === "dispatch_result") return `The collaboration call returned with status: ${item.toolStatus || "unknown"}`;
-  if (item.event === "external_message") return "Sent a user-facing update backed by actual progress.";
-  if (item.event === "agent_end") return "The current run ended and its state was recorded.";
-  return item.event || "Recorded one internal action";
+  if (item.event === "workspace_discovery") return "在继续追问前，先检查了已配置的工作区与项目线索。";
+  if (item.event === "internal_coordination") return "已发起内部协作，寻找最合适的执行者。";
+  if (item.event === "execution_lane_request") return "正在请求复用已有 Session，或新建执行通道。";
+  if (item.event === "dispatch_result") return `协作调用已返回，状态：${item.toolStatus || "未知"}`;
+  if (item.event === "external_message") return "已基于真实进展生成对用户可见的更新。";
+  if (item.event === "agent_end") return "当前 Run 已结束，状态已落盘。";
+  return item.event || "记录了一次内部动作";
 }
 
 function buildDecisionChain(run) {
@@ -275,6 +287,64 @@ function buildTaskSteps(run, data) {
   ];
 }
 
+function buildTaskChain(run, data) {
+  const nodes = [];
+  const seen = new Set();
+  const addNode = (id, title, note = "") => {
+    const normalizedId = String(id || "").trim() || title;
+    if (!normalizedId || seen.has(normalizedId)) return;
+    seen.add(normalizedId);
+    nodes.push({ id: normalizedId, title, note });
+  };
+
+  addNode("user-request", "用户问句", deriveTaskSummary(run));
+  addNode(`agent:${run.agentId}`, getAgentDisplayName(data, run.agentId), "Coordinator");
+
+  const dispatches = sortByTimestampAsc(
+    (data.recentDispatches || []).filter((entry) => entry.runId === run.runId),
+    (entry) => entry.timestamp
+  );
+  for (const entry of dispatches) {
+    const targetAgentId = String(entry.target?.agentId || "").trim();
+    if (!targetAgentId) continue;
+    addNode(`agent:${targetAgentId}`, getAgentDisplayName(data, targetAgentId), entry.target?.routeType === "spawn" ? "Spawn 通道" : "复用 Session");
+  }
+
+  const childTasks = sortByTimestampAsc(Array.isArray(run.childTasks) ? run.childTasks : [], (task) => task.updatedAt);
+  for (const task of childTasks) {
+    const taskAgentId = String(task.agentId || "").trim();
+    if (!taskAgentId) continue;
+    addNode(`agent:${taskAgentId}`, getAgentDisplayName(data, taskAgentId), `Child Task: ${task.phase || "progress"}`);
+  }
+
+  if (run.lastExternalMessage) {
+    addNode("user-delivery", "用户交付", getEffectiveStatus(run) === "completed" ? "已交付" : "最近一次对外更新");
+  }
+
+  return nodes;
+}
+
+function buildTaskChainFacts(run, data) {
+  const latestDispatch = getLatestDispatch(run, data);
+  const facts = [
+    { label: "用户问句", value: deriveTaskSummary(run) },
+    { label: "Coordinator", value: getAgentDisplayName(data, run.agentId) },
+    { label: "当前处理人", value: getAgentDisplayName(data, getCurrentOwner(run, data)) },
+    { label: "Task Route", value: getRouteLabel(latestDispatch?.target) },
+    { label: "Current Step", value: getCurrentProgress(run, data) }
+  ];
+  if (run.chainAssessment?.summary) {
+    facts.push({ label: "链路体检", value: run.chainAssessment.summary });
+  }
+  if (run.chainAssessment?.missing) {
+    facts.push({ label: "当前缺口", value: run.chainAssessment.missing });
+  }
+  if (run.chainAssessment?.nextAction) {
+    facts.push({ label: "下一步", value: run.chainAssessment.nextAction });
+  }
+  return facts;
+}
+
 function getAgentStateTone(agent) {
   if (agent.blockedRuns > 0) return "risk";
   return agent.state === "busy" ? "busy" : "idle";
@@ -288,7 +358,7 @@ function renderHero(data) {
   const agents = Array.isArray(data.agentRoster) ? data.agentRoster : [];
   const count = agents.length;
   const activeLinks = Array.isArray(data.recentDispatches) ? data.recentDispatches.length : 0;
-  el.heroSub.textContent = `Powered by OpenClaw. ${count} agents are configured and ${activeLinks} recent collaboration links are visible in the current snapshot.`;
+  el.heroSub.textContent = `由 OpenClaw 驱动，当前已配置 ${count} 个 Agent，并展示最近 ${activeLinks} 条协作链路。`;
 }
 
 function deriveOrgHierarchy(agents) {
@@ -342,10 +412,10 @@ function renderSummary(data) {
   const waiting = tasks.filter((task) => getEffectiveStatus(task) === "waiting").length;
   const delegated = tasks.filter((task) => (task.flowTaskSummary?.total || 0) > 0 || (task.childTaskIds || []).length > 0).length;
   const cards = [
-    { title: "Open tasks", value: `${tasks.length}`, note: `${delegated} involve multi-agent coordination` },
-    { title: "In progress", value: `${waiting}`, note: "Waiting on feedback, confirmation, or the next action" },
-    { title: "Needs attention", value: `${blocked}`, note: "Blocked tasks that may need intervention" },
-    { title: "Recent success rate", value: `${summary.successRate || 0}%`, note: "Based on recent task closure outcomes" }
+    { title: "活跃任务", value: `${tasks.length}`, note: `${delegated} 项涉及多 Agent 协作` },
+    { title: "处理中", value: `${waiting}`, note: "等待反馈、确认或下一步动作" },
+    { title: "需要关注", value: `${blocked}`, note: "存在阻塞，可能需要人工介入" },
+    { title: "近期完成率", value: `${summary.successRate || 0}%`, note: "按最近任务收口结果统计" }
   ];
   el.summary.innerHTML = cards.map((item) => `
     <article class="summary-card">
@@ -364,7 +434,7 @@ function renderAgents(data) {
       (Number(b.queueDepth) || 0) - (Number(a.queueDepth) || 0) ||
       String(a.displayName || a.agentId || "").localeCompare(String(b.displayName || b.agentId || ""))
     );
-  if (!agents.length) return renderEmpty(el.agents, "No agents are available in the current snapshot.");
+  if (!agents.length) return renderEmpty(el.agents, "当前快照中暂无 Agent 信息。");
   el.agents.innerHTML = agents.map((agent) => `
     <article class="agent-card ${esc(getAgentStateTone(agent))}" data-agent-id="${esc(agent.agentId)}">
       <div class="agent-summary">
@@ -373,7 +443,7 @@ function renderAgents(data) {
             <div class="agent-name">${esc(agent.emoji || "")} ${esc(agent.displayName || agent.agentId)}</div>
             <div class="agent-theme">${esc(agent.theme || agent.agentId)}</div>
           </div>
-          <div class="agent-pill">${esc(agent.state === "busy" ? "Busy" : "Idle")}</div>
+          <div class="agent-pill">${esc(agent.state === "busy" ? "忙碌" : "空闲")}</div>
         </div>
         <div class="agent-metrics compact">
           <span>Tokens ${esc(fmtCompactNumber(agent.tokenProxy || 0))}</span>
@@ -451,7 +521,7 @@ function renderGraph(data) {
     return { ...edge, from, to, active };
   });
   el.graph.innerHTML = `
-    <svg viewBox="0 0 ${model.width} ${model.height}" class="graph-svg" role="img" aria-label="OpenClaw coordination graph">
+    <svg viewBox="0 0 ${model.width} ${model.height}" class="graph-svg" role="img" aria-label="OpenClaw 协作关系图">
       <defs>
         <marker id="arrow" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto">
           <path d="M0,0 L0,6 L8,3 z" class="graph-arrow" />
@@ -464,7 +534,7 @@ function renderGraph(data) {
         return `
           <g class="graph-edge org">
             <path d="M${from.x},${from.y + 38} C${from.x},${midY} ${to.x},${midY} ${to.x},${to.y - 38}"></path>
-            <text x="${Math.round((from.x + to.x) / 2)}" y="${midY + 14}">dispatch</text>
+            <text x="${Math.round((from.x + to.x) / 2)}" y="${midY + 14}">分派</text>
           </g>
         `;
       }).join("")}
@@ -473,7 +543,7 @@ function renderGraph(data) {
         return `
           <g class="graph-edge ${edge.active ? "active" : ""}">
             <path d="M${edge.from.x},${edge.from.y + 38} C${edge.from.x},${midY} ${edge.to.x},${midY} ${edge.to.x},${edge.to.y - 38}" marker-end="url(#arrow)"></path>
-            <text x="${Math.round((edge.from.x + edge.to.x) / 2)}" y="${midY - 8}">${esc(edge.routeType === "send" ? "reuse" : edge.routeType === "spawn" ? "spawn" : edge.status || "sent")}</text>
+            <text x="${Math.round((edge.from.x + edge.to.x) / 2)}" y="${midY - 8}">${esc(edge.routeType === "send" ? "send" : edge.routeType === "spawn" ? "spawn" : edge.status || "sent")}</text>
           </g>
         `;
       }).join("")}
@@ -526,7 +596,7 @@ function deriveTaskSummary(run) {
 }
 
 function getAgentDisplayName(data, agentId) {
-  if (!agentId) return "相关同事";
+  if (!agentId) return "相关 Agent";
   const match = (data.agentRoster || []).find((agent) => agent.agentId === agentId);
   return match?.displayName || agentId;
 }
@@ -552,32 +622,35 @@ function needsTextToggle(value) {
   return text.length > 96 || text.includes("\n");
 }
 
+function sortTimelineDesc(items) {
+  return items.sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
+}
+
 function buildWorkTreeRows(run, data) {
-  const timelineEvents = Array.isArray(run.timelineEvents) ? run.timelineEvents : [];
-  if (timelineEvents.length > 0) {
-    return timelineEvents
-      .map((item) => ({
-        timestamp: item.timestamp,
-        owner: getTimelineOwnerName(data, item.owner, run.agentId),
-        role: item.role === "最终回复"
-          ? "回复用户"
-          : item.role === "内部查询"
-            ? "任务拆解"
-          : item.role === "安排跟进"
-            ? "任务分配"
-            : (item.role || "任务更新"),
-        text: item.text || "",
-        tone: item.tone || ""
-      }))
-      .filter((item) => item.text)
-      .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
-  }
   const rows = [{
     timestamp: run.startedAt,
     owner: "用户",
     role: "用户发起",
     text: deriveTaskSummary(run)
   }];
+
+  for (const item of (Array.isArray(run.timelineEvents) ? run.timelineEvents : [])) {
+    rows.push({
+      timestamp: item.timestamp,
+      owner: getTimelineOwnerName(data, item.owner, run.agentId),
+      role: item.role === "最终回复"
+        ? "回复用户"
+        : item.role === "内部查询"
+          ? "任务拆解"
+        : item.role === "安排跟进"
+          ? "任务分配"
+        : item.role === "对外同步"
+          ? "外部同步"
+          : (item.role || "任务更新"),
+      text: item.text || "",
+      tone: item.tone || ""
+    });
+  }
 
   for (const entry of (data.recentDispatches || []).filter((item) => item.runId === run.runId)) {
     const targetName = getAgentDisplayName(data, entry.target?.agentId);
@@ -626,9 +699,19 @@ function buildWorkTreeRows(run, data) {
     });
   }
 
-  return rows
-    .filter((item) => item.text)
-    .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")));
+  const seen = new Set();
+  return sortTimelineDesc(rows.filter((item) => {
+    if (!item.text) return false;
+    const key = [
+      String(item.timestamp || ""),
+      String(item.owner || ""),
+      String(item.role || ""),
+      String(item.text || "")
+    ].join("\u0000");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }));
 }
 
 function captureUiState() {
@@ -671,42 +754,109 @@ function getCurrentProgress(run, data) {
     humanizeLatestDetail(run, getLatestBlocker(run, data));
 }
 
+function getSupervisorSummary(run) {
+  if (!run.supervisorPending && !run.supervisorLastInterventionAt) return null;
+  const owner = String(run.supervisorAgentId || "").trim() || "manager";
+  const reason = String(run.supervisorReason || run.flowWaitSummary || run.lastBlockReason || "").trim() || "任务等待时间过长，需要人工收敛";
+  return {
+    owner,
+    reason,
+    count: Number(run.supervisorInterventionCount || 0),
+    time: run.supervisorLastInterventionAt || ""
+  };
+}
+
+function buildSupervisorFacts(run) {
+  const summary = getSupervisorSummary(run);
+  if (!summary) return [];
+  return [
+    { label: "Supervisor", value: summary.owner },
+    { label: "督办时间", value: fmtTime(summary.time) },
+    { label: "督办次数", value: String(summary.count || 1) },
+    { label: "督办原因", value: summary.reason }
+  ];
+}
+
 function renderTimeline(data) {
   const tasks = buildTaskCards(data);
   el.taskCount.textContent = `${tasks.length} 项`;
-  if (!tasks.length) return renderEmpty(el.timeline, "No active TaskFlow runs are visible right now.");
+  if (!tasks.length) return renderEmpty(el.timeline, "当前没有可展示的活跃 TaskFlow 任务。");
 
   el.timeline.innerHTML = tasks.map((run, index) => {
     const worktree = buildWorkTreeRows(run, data);
     const taskSummary = deriveTaskSummary(run);
     const status = getEffectiveStatus(run);
+    const chain = buildTaskChain(run, data);
+    const chainFacts = buildTaskChainFacts(run, data);
+    const supervisorFacts = buildSupervisorFacts(run);
+    const supervisorSummary = getSupervisorSummary(run);
     return `
       <details
         class="task-card worktree-card"
         data-run-id="${esc(run.runId || "")}"
         ${uiState.taskOpen.has(run.runId) || (index === 0 && uiState.taskOpen.size === 0) ? "open" : ""}
-      >
+        >
         <summary class="task-summary">
           <div class="task-head">
             <div>
-              <div class="task-time">Task ${index + 1} · ${esc(fmtTime(run.updatedAt || run.startedAt))}</div>
+              <div class="task-time">任务 ${index + 1} · ${esc(fmtTime(run.updatedAt || run.startedAt))}</div>
               <h3>${esc(taskSummary)}</h3>
             </div>
             <div class="task-status ${esc(status)}">${esc(getStatusText(status))}</div>
           </div>
         </summary>
+        <section class="task-chain">
+          <div class="chain-title">任务链路</div>
+          <div class="chain-path">
+            ${chain.map((node, chainIndex) => `
+              ${chainIndex > 0 ? `<span class="chain-arrow">→</span>` : ""}
+              <span class="chain-node">
+                <span class="chain-node-title">${esc(node.title)}</span>
+                ${node.note ? `<span class="chain-node-note">${esc(node.note)}</span>` : ""}
+              </span>
+            `).join("")}
+          </div>
+          <div class="chain-facts">
+            ${chainFacts.map((item) => `
+              <div class="chain-fact">
+                <div class="chain-fact-label">${esc(item.label)}</div>
+                <div class="chain-fact-value">${esc(item.value || "-")}</div>
+              </div>
+            `).join("")}
+          </div>
+          ${supervisorSummary ? `
+            <div class="supervisor-panel ${run.supervisorPending ? "pending" : ""}">
+              <div class="supervisor-head">
+                <div>
+                  <div class="chain-title">督办状态</div>
+                  <div class="supervisor-title">${esc(run.supervisorPending ? "Supervisor 已介入" : "最近一次督办记录")}</div>
+                </div>
+                <div class="supervisor-pill">${esc(supervisorSummary.owner)}</div>
+              </div>
+              <div class="supervisor-reason">${esc(supervisorSummary.reason)}</div>
+              <div class="supervisor-facts">
+                ${supervisorFacts.map((item) => `
+                  <div class="supervisor-fact">
+                    <div class="chain-fact-label">${esc(item.label)}</div>
+                    <div class="chain-fact-value">${esc(item.value || "-")}</div>
+                  </div>
+                `).join("")}
+              </div>
+            </div>
+          ` : ""}
+        </section>
         <div class="worktree-body">
           <div class="worktree-rail">
             ${worktree.length ? worktree.map((item) => `
               <article class="worktree-node ${esc(item.tone || "")}">
                 <div class="worktree-dot"></div>
                 <div class="worktree-content">
-              <div class="worktree-meta">${esc(item.role)} · ${esc(item.owner || "-")} · ${esc(fmtTime(item.timestamp))}</div>
+                  <div class="worktree-meta">${esc(item.role)} · ${esc(item.owner || "-")} · ${esc(fmtTime(item.timestamp))}</div>
               <div class="worktree-text ${needsTextToggle(item.text) ? "is-collapsed" : ""}">${esc(item.text)}</div>
-                  ${needsTextToggle(item.text) ? `<button type="button" class="worktree-toggle" aria-expanded="false">Expand</button>` : ""}
+                  ${needsTextToggle(item.text) ? `<button type="button" class="worktree-toggle" aria-expanded="false">展开</button>` : ""}
                 </div>
               </article>
-            `).join("") : `<div class="empty-inline">No timeline entries are available yet.</div>`}
+            `).join("") : `<div class="empty-inline">暂时还没有时间线记录。</div>`}
           </div>
         </div>
       </details>
@@ -724,24 +874,24 @@ async function loadDashboard() {
       throw new Error("快照结构不完整");
     }
     if (shouldIgnoreSnapshot(data)) {
-      el.generatedAt.textContent = `Updated: ${fmtTime(lastGoodData?.meta?.generatedAt)} · waiting for a stable snapshot`;
+      el.generatedAt.textContent = `更新时间：${fmtTime(lastGoodData?.meta?.generatedAt)} · 正在等待稳定快照`;
       return;
     }
     lastGoodData = data;
     applyDashboard(data);
   } catch (error) {
     if (lastGoodData) {
-      el.generatedAt.textContent = `Updated: ${fmtTime(lastGoodData?.meta?.generatedAt)} · transient fetch failure, showing the latest cached snapshot`;
+      el.generatedAt.textContent = `更新时间：${fmtTime(lastGoodData?.meta?.generatedAt)} · 拉取暂时失败，正在显示最近一次缓存快照`;
       refreshHeartbeat();
       return;
     }
     lastGeneratedAt = "";
-    el.generatedAt.textContent = "Updated: load failed";
-    el.heartbeat.textContent = "Heartbeat: load failed";
-    el.heroSub.textContent = "The dashboard snapshot could not be loaded.";
-    renderEmpty(el.summary, "Waiting for data");
-    renderEmpty(el.agents, "Waiting for data");
-    renderEmpty(el.graph, "Waiting for data");
+    el.generatedAt.textContent = "更新时间：加载失败";
+    el.heartbeat.textContent = "实时心跳：加载失败";
+    el.heroSub.textContent = "暂时无法加载 Dashboard 快照。";
+    renderEmpty(el.summary, "等待数据中");
+    renderEmpty(el.agents, "等待数据中");
+    renderEmpty(el.graph, "等待数据中");
     renderEmpty(el.timeline, `暂时无法加载：${error.message}`);
   }
 }
