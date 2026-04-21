@@ -148,13 +148,6 @@ function getRouteLabel(target) {
   return TARGET_KIND_TEXT[target?.targetKind] || "正在进行内部协作";
 }
 
-function getRouteReason(target) {
-  if (!target) return "当前还在确认最合适的处理人。";
-  if (target.routeType === "send") return "任务沿用已有 Session 继续推进。";
-  if (target.routeType === "spawn") return "任务已新建独立 Run 通道，便于隔离或并行处理。";
-  return "任务当前正在内部协作链路中推进。";
-}
-
 function humanizeLatestDetail(run, latestBlocker) {
   if (run.flowWaitSummary) return run.flowWaitSummary;
   if (latestBlocker?.reason) return latestBlocker.reason;
@@ -220,71 +213,6 @@ function buildTaskCards(data) {
   }
   return Array.from(unique.values())
     .sort((a, b) => String(b.updatedAt || b.startedAt || "").localeCompare(String(a.updatedAt || a.startedAt || "")));
-}
-
-function getDecisionType(item) {
-  const event = String(item.event || "");
-  if (event === "before_prompt_build") return "thought";
-  if (event.includes("blocked") || item.blockReason) return "observation";
-  if (event.includes("dispatch") || event.includes("coordination") || event.includes("discovery") || event.includes("message")) {
-    return "action";
-  }
-  return "observation";
-}
-
-function describeDecision(item, run) {
-  if (item.blockReason) return item.blockReason;
-  if (item.externalMessage) return item.externalMessage;
-  if (item.event === "before_prompt_build") {
-    return run.suggestedSpawn?.agentId
-      ? `已将 ${run.suggestedSpawn.agentId} 识别为候选执行者，并准备交接执行通道。`
-      : "已完成任务分类，并准备进入下一步内部协作。";
-  }
-  if (item.event === "workspace_discovery") return "在继续追问前，先检查了已配置的工作区与项目线索。";
-  if (item.event === "internal_coordination") return "已发起内部协作，寻找最合适的执行者。";
-  if (item.event === "execution_lane_request") return "正在请求复用已有 Session，或新建执行通道。";
-  if (item.event === "dispatch_result") return `协作调用已返回，状态：${item.toolStatus || "未知"}`;
-  if (item.event === "external_message") return "已基于真实进展生成对用户可见的更新。";
-  if (item.event === "agent_end") return "当前 Run 已结束，状态已落盘。";
-  return item.event || "记录了一次内部动作";
-}
-
-function buildDecisionChain(run) {
-  const items = Array.isArray(run.activityTrail) ? run.activityTrail : [];
-  return items.slice(-8).map((item) => ({
-    type: getDecisionType(item),
-    label: item.toolName || item.event || "event",
-    detail: describeDecision(item, run),
-    timestamp: item.timestamp
-  }));
-}
-
-function buildTaskSteps(run, data) {
-  const latestDispatch = getLatestDispatch(run, data);
-  const latestBlocker = getLatestBlocker(run, data);
-  return [
-    {
-      label: "任务进入",
-      detail: run.promptText || "已收到任务",
-      done: true
-    },
-    {
-      label: "跟进安排",
-      detail: run.workspaceDiscoverySeen ? "已经找到相关资料或项目位置" : run.internalCoordinationSeen ? "已经安排合适同事跟进" : "正在确认最合适的负责人",
-      done: Boolean(run.workspaceDiscoverySeen || run.internalCoordinationSeen || run.executionLaneSeen)
-    },
-    {
-      label: "处理路径",
-      detail: getRouteLabel(latestDispatch?.target),
-      done: Boolean(latestDispatch)
-    },
-    {
-      label: run.status === "blocked" ? "需要关注" : "最新情况",
-      detail: humanizeLatestDetail(run, latestBlocker),
-      done: true,
-      tone: run.status === "blocked" ? "danger" : "success"
-    }
-  ];
 }
 
 function buildTaskChain(run, data) {
@@ -735,15 +663,6 @@ function getCurrentOwner(run, data) {
     latestDispatch?.target?.agentId ||
     run.agentId ||
     "待分配";
-}
-
-function getParticipantLine(run) {
-  const participants = new Set(["用户"]);
-  if (run.agentId) participants.add(run.agentId);
-  for (const task of (run.childTasks || [])) {
-    if (task.agentId) participants.add(task.agentId);
-  }
-  return Array.from(participants).join(" -> ");
 }
 
 function getCurrentProgress(run, data) {

@@ -193,7 +193,6 @@ const plugin = {
       getRun,
       findContinuableRootRun,
       rebindRunState,
-      resolveState,
       getBestEffortParentLink,
       setBestEffortChildLink,
       deleteBestEffortChildLink,
@@ -221,7 +220,6 @@ const plugin = {
       findParentRunByChildLink,
       reviveParentRun,
       findParentRunByChildOutcome,
-      buildParentDeliveryText,
       applyChildOutcomeToParent
     } = createFlowRuntimeHelpers({
       api,
