@@ -1,17 +1,17 @@
 ---
 name: mission-deck-autonomy
-description: Use when OpenClaw runs with mission-deck or TaskFlow-based orchestration and the goal is to coordinate multi-agent work without editing the user's workspace prompt files. This skill defines generic routing, role selection, TaskFlow escalation, completion guardrails, and user-update rules for autonomous multi-agent execution. It is role-name agnostic and should be used for designing or operating coordinator/executor/researcher/reviewer style teams on any OpenClaw host.
+description: Use when the host supports multi-agent messaging plus some form of durable workflow tracking, and the goal is to coordinate multi-agent work without editing user-owned prompt files. This skill defines generic routing, role selection, durable-flow escalation, completion guardrails, and user-update rules for autonomous multi-agent execution. It is role-name agnostic and should be used for designing or operating coordinator/executor/researcher/reviewer style teams on any compatible host.
 ---
 
 # Mission Deck Autonomy
 
-Use this skill when the host already has multi-agent messaging and TaskFlow-style orchestration, and the main need is a portable collaboration method rather than team-specific prompt files.
+Use this skill when the host already has multi-agent messaging and some durable workflow mechanism, and the main need is a portable collaboration method rather than team-specific prompt files.
 
 ## What This Skill Covers
 
 - Classify work as `plain`, `mission-lite`, or `mission-flow`
 - Choose roles by capability, not by fixed agent ids
-- Decide when a task must enter `TaskFlow`
+- Decide when a task must enter a durable flow
 - Keep completion standards consistent across agents
 - Keep user-facing updates short and stateful
 - Treat the root flow as the only durable completion source
@@ -29,13 +29,13 @@ Use this skill when the host already has multi-agent messaging and TaskFlow-styl
 2. Classify the task as `plain`, `mission-lite`, or `mission-flow`.
 3. Assign one coordinator when the work is not purely direct.
 4. Assign execution/research/review responsibilities by capability.
-5. If the task is long-running or stateful, use `TaskFlow` as the only durable status source.
+5. If the task is long-running or stateful, use the durable flow as the only durable status source.
 6. Do not claim completion without result evidence.
 
 Architecture rule:
 
 - hook-level narration is not the durable workflow truth
-- the root `TaskFlow` is the durable truth for `mission-flow`
+- the root durable flow is the durable truth for `mission-flow`
 - child replies and synthetic announce messages are inputs to the root flow, not independent completion paths
 
 ## Task Classes
@@ -53,7 +53,7 @@ Use when most of these are true:
 Handling:
 
 - complete directly in the current run
-- do not create TaskFlow
+- do not create a durable flow
 - do not force orchestration metadata beyond minimal local reasoning
 
 ### `mission-lite`
@@ -84,9 +84,9 @@ Use when any two of these are true:
 
 Handling:
 
-- create or continue one durable TaskFlow
+- create or continue one durable flow
 - keep current phase, next phase, risk, and ETA current
-- treat TaskFlow as the only durable state source
+- treat the durable flow as the only durable state source
 - require result evidence before completion
 - reconcile child outcomes back into the root flow before final delivery
 
