@@ -2,7 +2,6 @@ export function getDashboardElements() {
   return {
     versionBadge: document.getElementById("versionBadge"),
     generatedAt: document.getElementById("generatedAt"),
-    heartbeat: document.getElementById("heartbeat"),
     heroSub: document.getElementById("heroSub"),
     summary: document.getElementById("summary"),
     agents: document.getElementById("agents"),

@@ -3,8 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
     <title>MISSION DECK</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=dashboard-live-20260422-4" />
   </head>
   <body>
     <main class="page">
@@ -15,9 +18,8 @@
           <p id="heroSub" class="sub">由 OpenClaw 驱动，正在读取当前 Agent 编组与协作关系。</p>
         </div>
         <div class="hero-side">
-          <div id="versionBadge" class="version-badge">Version: v0.1.0+42f20ca</div>
+          <div id="versionBadge" class="version-badge">Version: loading...</div>
           <div id="generatedAt" class="generated">更新时间：-</div>
-          <div id="heartbeat" class="heartbeat">实时心跳：-</div>
         </div>
       </header>
 
@@ -51,7 +53,7 @@
           <section class="section">
             <div class="section-head">
               <h2>Agent 状态</h2>
-              <span class="hint">能力、负载、心跳</span>
+              <span class="hint">能力、负载、更新</span>
             </div>
             <div id="agents" class="agents-grid sidebar-agents"></div>
           </section>
@@ -59,6 +61,8 @@
       </section>
     </main>
 
-    <script type="module" src="./app.js"></script>
+    <script type="module">
+      await import("./app.js?v=dashboard-live-20260422-4");
+    </script>
   </body>
 </html>

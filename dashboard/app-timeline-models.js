@@ -3,7 +3,7 @@ import {
   needsTextToggle,
   sortTimelineDesc,
   truncateText
-} from "./app-utils.js";
+} from "./app-utils.js?v=dashboard-live-20260422-4";
 import {
   deriveTaskSummary,
   getAgentDisplayName,
@@ -11,7 +11,7 @@ import {
   getLatestDispatch,
   getFlowStepText,
   humanizeLatestDetail
-} from "./app-task-core.js";
+} from "./app-task-core.js?v=dashboard-live-20260422-4";
 
 export function getTimelineOwnerName(data, owner, fallbackAgentId) {
   const normalizedOwner = String(owner || "").trim();

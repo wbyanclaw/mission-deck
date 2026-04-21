@@ -216,6 +216,18 @@ h1 {
   border-color: rgba(180, 35, 24, 0.18);
 }
 
+.agent-pill.busy {
+  color: #b45309;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.28);
+}
+
+.agent-pill.idle {
+  color: rgba(25, 36, 48, 0.72);
+  background: rgba(25, 36, 48, 0.08);
+  border: 1px solid rgba(25, 36, 48, 0.12);
+}
+
 .agent-head {
   justify-content: space-between;
   align-items: start;
@@ -251,6 +263,7 @@ h1 {
 .task-status {
   padding: 6px 12px;
   background: rgba(25, 36, 48, 0.08);
+  border: 1px solid transparent;
   white-space: nowrap;
   flex-shrink: 0;
 }

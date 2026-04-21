@@ -2,7 +2,7 @@ import {
   TARGET_KIND_TEXT,
   sortByTimestampAsc,
   truncateText
-} from "./app-utils.js";
+} from "./app-utils.js?v=dashboard-live-20260422-4";
 
 export function getEffectiveStatus(run) {
   return String(run?.status || run?.flowStatus || "").toLowerCase();
@@ -162,8 +162,21 @@ export function buildTaskChain(run, data) {
     addNode(`agent:${taskAgentId}`, getAgentDisplayName(data, taskAgentId), `Child Task: ${task.phase || "progress"}`);
   }
 
-  if (run.lastExternalMessage) {
-    addNode("user-delivery", "用户交付", getEffectiveStatus(run) === "completed" ? "已交付" : "最近一次对外更新");
+  const hasVisibleReply =
+    Boolean(run.lastExternalMessage) ||
+    Array.isArray(run.timelineEvents) && run.timelineEvents.some((item) => item?.role === "最终回复");
+
+  if (hasVisibleReply) {
+    addNode(
+      `agent:${run.agentId}:final-reply`,
+      getAgentDisplayName(data, run.agentId),
+      getEffectiveStatus(run) === "completed" ? "最终汇总" : "对外同步"
+    );
+    addNode(
+      "user-delivery",
+      "回复用户",
+      getEffectiveStatus(run) === "completed" ? "已交付" : "最近一次对外更新"
+    );
   }
 
   return nodes;

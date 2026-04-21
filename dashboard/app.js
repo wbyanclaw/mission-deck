@@ -4,42 +4,43 @@ import {
   renderEmpty,
   shouldIgnoreSnapshot,
   timeAgo
-} from "./app-utils.js";
+} from "./app-utils.js?v=dashboard-live-20260422-4";
 import {
   bindTimelineToggle,
   captureUiState,
   createUiState,
   getDashboardElements
-} from "./app-dom.js";
+} from "./app-dom.js?v=dashboard-live-20260422-4";
 import {
   renderAgents,
   renderGraph,
   renderHero,
   renderSummary,
   renderTimeline
-} from "./app-renderers.js";
+} from "./app-renderers.js?v=dashboard-live-20260422-4";
 
 const el = getDashboardElements();
 
-const DASHBOARD_VERSION = "v0.1.0+patch3";
+const DASHBOARD_VERSION = "v0.1.0+patch4";
 
 let lastGeneratedAt = "";
 let lastGoodData = null;
 const uiState = createUiState();
 
-function refreshHeartbeat() {
-  el.heartbeat.textContent = lastGeneratedAt
-    ? `实时心跳：${timeAgo(lastGeneratedAt)}`
-    : "实时心跳：-";
+if (el.versionBadge) {
+  el.versionBadge.textContent = `Version: ${DASHBOARD_VERSION}`;
+}
+
+function renderUpdatedAt(value, suffix = "") {
+  const relative = timeAgo(value);
+  el.generatedAt.textContent = suffix
+    ? `更新时间：${relative} · ${suffix}`
+    : `更新时间：${relative}`;
 }
 
 function applyDashboard(data) {
-  if (el.versionBadge) {
-    el.versionBadge.textContent = `Version: ${DASHBOARD_VERSION}`;
-  }
-  el.generatedAt.textContent = `更新时间：${fmtTime(data.meta?.generatedAt)}`;
   lastGeneratedAt = data.meta?.generatedAt || "";
-  refreshHeartbeat();
+  renderUpdatedAt(lastGeneratedAt);
   renderHero(el, data);
   renderSummary(el, data);
   renderAgents(el, data);
@@ -57,20 +58,18 @@ async function loadDashboard() {
       throw new Error("快照结构不完整");
     }
     if (shouldIgnoreSnapshot(data, lastGoodData)) {
-      el.generatedAt.textContent = `更新时间：${fmtTime(lastGoodData?.meta?.generatedAt)} · 正在等待稳定快照`;
+      renderUpdatedAt(lastGoodData?.meta?.generatedAt, "正在等待稳定快照");
       return;
     }
     lastGoodData = data;
     applyDashboard(data);
   } catch (error) {
     if (lastGoodData) {
-      el.generatedAt.textContent = `更新时间：${fmtTime(lastGoodData?.meta?.generatedAt)} · 拉取暂时失败，正在显示最近一次缓存快照`;
-      refreshHeartbeat();
+      renderUpdatedAt(lastGoodData?.meta?.generatedAt, "拉取暂时失败，正在显示最近一次缓存快照");
       return;
     }
     lastGeneratedAt = "";
     el.generatedAt.textContent = "更新时间：加载失败";
-    el.heartbeat.textContent = "实时心跳：加载失败";
     el.heroSub.textContent = "暂时无法加载 Dashboard 快照。";
     renderEmpty(el.summary, "等待数据中");
     renderEmpty(el.agents, "等待数据中");
@@ -80,7 +79,7 @@ async function loadDashboard() {
 }
 
 loadDashboard();
-setInterval(refreshHeartbeat, 1000);
+setInterval(() => renderUpdatedAt(lastGeneratedAt), 1000);
 setInterval(loadDashboard, 3000);
 
 bindTimelineToggle();
