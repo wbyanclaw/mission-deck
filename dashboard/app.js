@@ -49,7 +49,7 @@ function applyDashboard(data) {
 
 async function loadDashboard() {
   try {
-    captureUiState();
+    captureUiState(uiState);
     const response = await fetch(`./status.json?t=${Date.now()}`, { cache: "no-store" });
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();

@@ -95,6 +95,35 @@ test("synthetic announce completes the retained parent flow before allowing fina
   assert.match(flow.stateJson.finalOutput.text, /验收完成/);
 });
 
+test("child execution reply is hidden from external delivery and kept for parent reconciliation", async () => {
+  const harness = await createHarness();
+  await openParentWithChild(harness, {
+    parentRunId: "run-parent-hidden-child-1",
+    childRunId: "child-run-hidden-child-1",
+    childSessionKey: "agent:builder:subagent:7",
+    toolCallId: "tool-child-hidden-1"
+  });
+
+  await harness.emit(
+    "before_prompt_build",
+    { prompt: "修复构建失败" },
+    { agentId: "builder", runId: "child-run-hidden-child-1", sessionKey: "agent:builder:subagent:7" }
+  );
+  const result = await harness.emit(
+    "before_message_write",
+    {
+      message: {
+        role: "assistant",
+        content: [{ type: "text", text: "已真实读取 `mission-deck/package.json`，其中存在 `build` script。" }]
+      }
+    },
+    { agentId: "builder", runId: "child-run-hidden-child-1", sessionKey: "agent:builder:subagent:7" }
+  );
+
+  assert.ok(result?.message);
+  assert.equal(result.message.content[0].text, "NO_REPLY");
+});
+
 test("synthetic announce is silenced when it cannot complete a parent flow", async () => {
   const harness = await createHarness();
   const result = await harness.emit(

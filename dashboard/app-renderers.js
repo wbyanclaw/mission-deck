@@ -107,7 +107,7 @@ export function renderGraph(el, data) {
         return `
           <g class="graph-edge org">
             <path d="M${from.x},${from.y + 38} C${from.x},${midY} ${to.x},${midY} ${to.x},${to.y - 38}"></path>
-            <text x="${Math.round((from.x + to.x) / 2)}" y="${midY + 14}">分派</text>
+            <text x="${Math.round((from.x + to.x) / 2)}" y="${midY + 14}">可分配</text>
           </g>
         `;
       }).join("")}
@@ -116,7 +116,7 @@ export function renderGraph(el, data) {
         return `
           <g class="graph-edge ${edge.active ? "active" : ""}">
             <path d="M${edge.from.x},${edge.from.y + 38} C${edge.from.x},${midY} ${edge.to.x},${midY} ${edge.to.x},${edge.to.y - 38}" marker-end="url(#arrow)"></path>
-            <text x="${Math.round((edge.from.x + edge.to.x) / 2)}" y="${midY - 8}">${esc(edge.routeType === "send" ? "send" : edge.routeType === "spawn" ? "spawn" : edge.status || "sent")}</text>
+            <text x="${Math.round((edge.from.x + edge.to.x) / 2)}" y="${midY - 8}">协作中</text>
           </g>
         `;
       }).join("")}
