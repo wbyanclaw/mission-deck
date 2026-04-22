@@ -9,11 +9,6 @@
 - child task 的结果必须先回灌 root flow，再允许最终交付
 - 对用户的最终回复必须经过统一 finalize gate
 
-官方配套 skill：
-
-- `skills/mission-deck-autonomy/` 提供通用的多 Agent 路由、TaskFlow 升级策略和完成标准，不要求修改用户自己的 workspace 提示文件。
-- 这个 skill 会随插件一起安装；推荐使用 `mission-deck-install --apply --with-skill` 进行 agent-first 安装。
-
 它的目标是让多 Agent 协作具备这些特性：
 
 - 尽量复用已有、可见、可继续的 teammate 会话
@@ -109,31 +104,30 @@
 agent-first 安装：
 
 ```bash
-npx mission-deck-install@latest --apply --with-skill --json
+npx mission-deck-install@latest --apply --json
 ```
 
 如果本地已经有安装命令：
 
 ```bash
-mission-deck-install --apply --with-skill --json
+mission-deck-install --apply --json
 ```
 
 带校验和服务重启的完整安装：
 
 ```bash
-npx mission-deck-install@latest --apply --with-skill --verify --restart --json
+npx mission-deck-install@latest --apply --verify --restart --json
 ```
 
 或：
 
 ```bash
-mission-deck-install --apply --with-skill --verify --restart --json
+mission-deck-install --apply --verify --restart --json
 ```
 
 这个 installer 会：
 
 - 默认把插件复制到 `~/.openclaw/extensions/mission-deck`
-- 把 bundled 的 `mission-deck-autonomy` skill 一起放入插件目录
 - 更新 `~/.openclaw/openclaw.json`
 - 校验插件文件和配置项是否安装成功
 - 在需要时通过 `systemctl` 重启目标 OpenClaw 服务
@@ -167,10 +161,12 @@ mission-deck-install --apply --with-skill --verify --restart --json
 ```json
 {
   "plugins": {
+    "load": {
+      "paths": ["~/.openclaw/extensions/mission-deck"]
+    },
     "entries": {
       "mission-deck": {
         "enabled": true,
-        "path": "~/.openclaw/extensions/mission-deck",
         "config": {}
       }
     }

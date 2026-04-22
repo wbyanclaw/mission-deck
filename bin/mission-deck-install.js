@@ -18,7 +18,6 @@ function parseArgs(argv) {
     json: false,
     restart: false,
     verify: false,
-    withSkill: false,
     openclawHome: process.env.OPENCLAW_HOME || DEFAULT_OPENCLAW_HOME,
     pluginDir: "",
     configPath: "",
@@ -30,7 +29,6 @@ function parseArgs(argv) {
     else if (arg === "--json") out.json = true;
     else if (arg === "--restart") out.restart = true;
     else if (arg === "--verify") out.verify = true;
-    else if (arg === "--with-skill") out.withSkill = true;
     else if (arg === "--openclaw-home") out.openclawHome = path.resolve(argv[++i] || "");
     else if (arg === "--plugin-dir") out.pluginDir = path.resolve(argv[++i] || "");
     else if (arg === "--config") out.configPath = path.resolve(argv[++i] || "");
@@ -43,7 +41,7 @@ function parseArgs(argv) {
 
 function usage() {
   return [
-    "mission-deck-install [--apply] [--verify] [--restart] [--json] [--with-skill] [--openclaw-home <dir>] [--plugin-dir <dir>] [--config <file>] [--service <name>]",
+    "mission-deck-install [--apply] [--verify] [--restart] [--json] [--openclaw-home <dir>] [--plugin-dir <dir>] [--config <file>] [--service <name>]",
     "",
     "Agent-first installer for the mission-deck OpenClaw plugin.",
     "",
@@ -52,7 +50,6 @@ function usage() {
     "  --verify       Verify plugin files and config after planning or applying.",
     "  --restart      Restart the target service with systemctl after applying.",
     "  --json         Emit structured JSON only.",
-    "  --with-skill   Assert that the bundled mission-deck-autonomy skill should be installed with the plugin.",
     "  --openclaw-home <dir>  Override the target OpenClaw home. Default: ~/.openclaw",
     "  --plugin-dir <dir>     Override the plugin destination directory.",
     "  --config <file>        Override the target openclaw.json path.",
@@ -91,17 +88,16 @@ function restartService(serviceName) {
 }
 
 async function verifyInstall(pluginDir, configPath) {
-  const skillPath = path.join(pluginDir, "skills", "mission-deck-autonomy", "SKILL.md");
   const pluginManifestPath = path.join(pluginDir, "openclaw.plugin.json");
   const config = await readJson(configPath);
   const pluginEntry = config?.plugins?.entries?.[PLUGIN_ID];
+  const loadPaths = Array.isArray(config?.plugins?.load?.paths) ? config.plugins.load.paths : [];
   const checks = {
     pluginDirExists: await exists(pluginDir),
     pluginManifestExists: await exists(pluginManifestPath),
-    bundledSkillExists: await exists(skillPath),
     configEntryPresent: Boolean(pluginEntry && typeof pluginEntry === "object"),
     pluginEnabled: pluginEntry?.enabled === true,
-    pluginPathMatches: path.resolve(String(pluginEntry?.path || "")) === path.resolve(pluginDir)
+    pluginLoadPathPresent: loadPaths.some((entry) => path.resolve(String(entry || "")) === path.resolve(pluginDir))
   };
   return {
     ok: Object.values(checks).every(Boolean),
@@ -115,15 +111,22 @@ function ensurePluginEntry(config, pluginDir) {
   const existing = config.plugins.entries[PLUGIN_ID];
   const next = {
     enabled: true,
-    path: pluginDir,
     config: {}
   };
   if (existing && typeof existing === "object") {
     next.enabled = existing.enabled !== false;
-    next.path = typeof existing.path === "string" && existing.path.trim() ? existing.path : pluginDir;
     next.config = existing.config && typeof existing.config === "object" ? { ...existing.config } : {};
   }
   config.plugins.entries[PLUGIN_ID] = next;
+}
+
+function ensurePluginLoadPath(config, pluginDir) {
+  config.plugins ??= {};
+  config.plugins.load ??= {};
+  const paths = Array.isArray(config.plugins.load.paths) ? config.plugins.load.paths.slice() : [];
+  const hasPluginPath = paths.some((entry) => path.resolve(String(entry || "")) === path.resolve(pluginDir));
+  if (!hasPluginPath) paths.push(pluginDir);
+  config.plugins.load.paths = paths;
 }
 
 function collectWarnings(config) {
@@ -174,8 +177,6 @@ async function executeInstall(argv, runtime = {}) {
     pluginId: PLUGIN_ID,
     pluginSource: PACKAGE_ROOT,
     pluginInstalled: false,
-    bundledSkillInstalled: true,
-    skillId: "mission-deck-autonomy",
     configUpdated: false,
     restartRequired: false,
     pluginDir,
@@ -196,7 +197,6 @@ async function executeInstall(argv, runtime = {}) {
 
   const config = await readJson(configPath);
   result.warnings.push(...collectWarnings(config));
-  result.notes.push("mission-deck-autonomy is bundled under the plugin's skills/ directory and ships with the plugin install.");
   result.notes.push("Static config alone cannot prove TaskFlow runtime support; verify after restart on the target host.");
 
   if (!args.apply) {
@@ -214,12 +214,10 @@ async function executeInstall(argv, runtime = {}) {
   result.pluginInstalled = true;
 
   ensurePluginEntry(config, pluginDir);
+  ensurePluginLoadPath(config, pluginDir);
   await writeFile(configPath, stableJson(config), "utf8");
   result.configUpdated = true;
   result.restartRequired = true;
-  if (args.withSkill) {
-    result.notes.push("Bundled skill requested explicitly; no separate skill copy was needed.");
-  }
   if (args.verify) {
     result.verification = await verifyInstall(pluginDir, configPath);
     if (!result.verification.ok) {

@@ -1,4 +1,0 @@
-version: 1
-display_name: Mission Deck Autonomy
-short_description: Generic TaskFlow collaboration rules for OpenClaw multi-agent teams
-default_prompt: Apply portable multi-agent autonomy rules using TaskFlow, role-based routing, and completion guardrails without editing user workspace prompt files.

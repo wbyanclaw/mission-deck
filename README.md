@@ -14,11 +14,6 @@ Language:
 - English: `README.md`
 - 简体中文: [README.zh-CN.md](./README.zh-CN.md)
 
-Official companion skill:
-
-- `skills/mission-deck-autonomy/` provides generic multi-agent routing, TaskFlow escalation, and completion guardrails without requiring edits to user workspace prompt files.
-- the skill is bundled with the plugin install; agent-first install should use `mission-deck-install --apply --with-skill`
-
 It is designed to make agent coordination:
 
 - visible in an existing reusable teammate session whenever possible
@@ -114,31 +109,30 @@ If TaskFlow or agent-to-agent support is missing, `mission-deck` should be treat
 Agent-first install:
 
 ```bash
-npx mission-deck-install@latest --apply --with-skill --json
+npx mission-deck-install@latest --apply --json
 ```
 
 or, after the package is already available locally:
 
 ```bash
-mission-deck-install --apply --with-skill --json
+mission-deck-install --apply --json
 ```
 
 Full install with verification and service restart:
 
 ```bash
-npx mission-deck-install@latest --apply --with-skill --verify --restart --json
+npx mission-deck-install@latest --apply --verify --restart --json
 ```
 
 or:
 
 ```bash
-mission-deck-install --apply --with-skill --verify --restart --json
+mission-deck-install --apply --verify --restart --json
 ```
 
 This installer:
 
 - copies the plugin to `~/.openclaw/extensions/mission-deck` by default
-- installs the bundled `mission-deck-autonomy` skill as part of the same plugin tree
 - updates `~/.openclaw/openclaw.json`
 - can verify the installed files and config entry
 - can optionally restart the target OpenClaw service with `systemctl`
@@ -172,10 +166,12 @@ Example snippet:
 ```json
 {
   "plugins": {
+    "load": {
+      "paths": ["~/.openclaw/extensions/mission-deck"]
+    },
     "entries": {
       "mission-deck": {
         "enabled": true,
-        "path": "~/.openclaw/extensions/mission-deck",
         "config": {}
       }
     }

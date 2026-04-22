@@ -49,7 +49,7 @@ test("installer apply with verify copies plugin tree and writes config entry", a
     tools: { agentToAgent: { enabled: true } }
   });
 
-  const result = await runInstaller(["--apply", "--with-skill", "--verify", "--json", "--openclaw-home", home]);
+  const result = await runInstaller(["--apply", "--verify", "--json", "--openclaw-home", home]);
   assert.equal(result.status, 0);
   assert.equal(result.stdoutJson.ok, true);
   assert.equal(result.stdoutJson.pluginInstalled, true);
@@ -59,12 +59,11 @@ test("installer apply with verify copies plugin tree and writes config entry", a
   const configAfter = JSON.parse(await readFile(join(home, "openclaw.json"), "utf8"));
   const pluginEntry = configAfter?.plugins?.entries?.["mission-deck"];
   assert.equal(pluginEntry.enabled, true);
-  assert.equal(resolve(pluginEntry.path), resolve(join(home, "extensions", "mission-deck")));
   assert.deepEqual(pluginEntry.config, {});
-
-  const skillFile = join(home, "extensions", "mission-deck", "skills", "mission-deck-autonomy", "SKILL.md");
-  const skillBody = await readFile(skillFile, "utf8");
-  assert.match(skillBody, /Mission Deck Autonomy/);
+  assert.equal(
+    configAfter?.plugins?.load?.paths?.some((entry) => resolve(entry) === resolve(join(home, "extensions", "mission-deck"))),
+    true
+  );
 });
 
 test("installer excludes release tarballs from local checkout copies", async () => {
