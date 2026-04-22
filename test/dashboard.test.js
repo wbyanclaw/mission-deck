@@ -595,3 +595,71 @@ test("task cards hide async continuation roots that only contain internal comple
 
   assert.deepEqual(tasks.map((run) => run.flowId), ["flow-user"]);
 });
+
+test("task cards sort by asked time before started or updated time", () => {
+  const tasks = buildTaskCards({
+    activeRuns: [
+      {
+        runId: "run-older",
+        agentId: "main",
+        flowId: "flow-older",
+        taskFlowSeen: true,
+        promptText: "旧任务",
+        status: "completed",
+        flowCurrentStep: "completed",
+        userAskedAt: "2026-04-22T04:33:00.000Z",
+        startedAt: "2026-04-22T04:34:00.000Z",
+        updatedAt: "2026-04-22T09:00:00.000Z"
+      },
+      {
+        runId: "run-newer",
+        agentId: "main",
+        flowId: "flow-newer",
+        taskFlowSeen: true,
+        promptText: "新任务",
+        status: "completed",
+        flowCurrentStep: "completed",
+        userAskedAt: "2026-04-22T09:36:45.000Z",
+        startedAt: "2026-04-22T09:37:08.000Z",
+        updatedAt: "2026-04-22T09:37:39.000Z"
+      }
+    ],
+    recentRuns: []
+  });
+
+  assert.deepEqual(tasks.map((task) => task.flowId), ["flow-newer", "flow-older"]);
+});
+
+test("task card sorting ignores invalid asked-time text and falls back to startedAt", () => {
+  const tasks = buildTaskCards({
+    activeRuns: [
+      {
+        runId: "run-a",
+        agentId: "main",
+        flowId: "flow-a",
+        taskFlowSeen: true,
+        promptText: "任务 A",
+        status: "completed",
+        flowCurrentStep: "completed",
+        userAskedAt: "任务 A",
+        startedAt: "2026-04-22T04:34:13.000Z",
+        updatedAt: "2026-04-22T08:30:48.000Z"
+      },
+      {
+        runId: "run-b",
+        agentId: "main",
+        flowId: "flow-b",
+        taskFlowSeen: true,
+        promptText: "任务 B",
+        status: "completed",
+        flowCurrentStep: "completed",
+        userAskedAt: "2026-04-22T04:33:00.000Z",
+        startedAt: "2026-04-22T04:34:00.000Z",
+        updatedAt: "2026-04-22T09:00:00.000Z"
+      }
+    ],
+    recentRuns: []
+  });
+
+  assert.deepEqual(tasks.map((task) => task.flowId), ["flow-a", "flow-b"]);
+});

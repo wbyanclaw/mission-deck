@@ -19,6 +19,21 @@ test("before_prompt_build creates a planned durable flow for mission-flow tasks"
   assert.equal(flow.stateJson.entryMode, "mission-flow");
 });
 
+test("before_prompt_build does not create a root flow for system-triggered async prompts", async () => {
+  const harness = await createHarness();
+  const result = await harness.emit(
+    "before_prompt_build",
+    {
+      prompt: "System (untrusted): [2026-04-22 17:36:45 GMT+8] Exec completed (tidal-ha, code 0) :: WSL2221 CLOSED WSL2222 CLOSED DISK 56% MEM 40%\n\nAn async command you ran earlier has completed. The result is shown in the system messages above. Handle the result internally. Do not relay it to the user unless explicitly requested."
+    },
+    { agentId: "dispatcher", runId: "run-system-root-1", sessionKey: "agent:dispatcher:main" }
+  );
+
+  assert.equal(result, undefined);
+  const createCall = harness.taskFlowCalls.find((entry) => entry.type === "createManaged");
+  assert.equal(createCall, undefined);
+});
+
 test("before_tool_call routing gates behave as expected", async () => {
   const harness = await createHarness();
 
@@ -73,6 +88,23 @@ test("before_tool_call blocks sessions_send that only supplies agentId", async (
   );
   assert.equal(result.block, true);
   assert.match(result.blockReason, /cannot target by agentId alone/i);
+});
+
+test("before_tool_call allows sessions_send by agentId alone for direct solo chats", async () => {
+  const harness = await createHarness();
+  await harness.emit(
+    "before_prompt_build",
+    { prompt: "分析一下目前这个项目最可能的技术债是什么" },
+    { agentId: "dispatcher", runId: "run-send-solo-1", sessionKey: "agent:dispatcher:main" }
+  );
+
+  const result = await harness.emit(
+    "before_tool_call",
+    { toolName: "sessions_send", params: { agentId: "builder", message: "最近在看什么？" } },
+    { agentId: "dispatcher", runId: "run-send-solo-1", sessionKey: "agent:dispatcher:main" }
+  );
+
+  assert.equal(result, undefined);
 });
 
 test("after_tool_call registers child task into durable flow state", async () => {

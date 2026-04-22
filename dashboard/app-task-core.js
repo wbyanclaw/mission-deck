@@ -9,6 +9,20 @@ function getRunTimestamp(run) {
   return getFlowFragmentTimestamp(run);
 }
 
+function isUsableTimestamp(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return !Number.isNaN(new Date(text).getTime());
+}
+
+function getDisplayTimestamp(run) {
+  const userAskedAt = String(run?.userAskedAt || "").trim();
+  if (isUsableTimestamp(userAskedAt)) return userAskedAt;
+  const startedAt = String(run?.startedAt || "").trim();
+  if (isUsableTimestamp(startedAt)) return startedAt;
+  return String(run?.updatedAt || "");
+}
+
 function parsePromptTimestamp(value) {
   const text = String(value || "");
   const metadataMatch = text.match(/"timestamp"\s*:\s*"([^"]+)"/i);
@@ -44,7 +58,7 @@ function parseLooseTimestamp(value) {
 
 function getUserAskedAt(sortedRuns) {
   for (const run of sortedRuns) {
-    if (String(run?.userAskedAt || "").trim()) return String(run.userAskedAt);
+    if (isUsableTimestamp(run?.userAskedAt)) return String(run.userAskedAt);
   }
   for (const run of sortedRuns) {
     const promptText = String(run?.initialUserPrompt || run?.promptText || "");
@@ -343,7 +357,7 @@ export function buildTaskCards(data) {
       const hasMeaningfulPrompt = promptText && !isSystemPromptText(promptText);
       return hasMeaningfulPrompt || Boolean(run.lastExternalMessage) || (Array.isArray(run.childTasks) && run.childTasks.length > 0);
     })
-    .sort((a, b) => String(b.updatedAt || b.startedAt || "").localeCompare(String(a.updatedAt || a.startedAt || "")));
+    .sort((a, b) => getDisplayTimestamp(b).localeCompare(getDisplayTimestamp(a)));
 }
 
 export function stripPromptMetadata(value) {

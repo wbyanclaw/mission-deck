@@ -29,6 +29,14 @@ test("mission entry mode still classifies plain, lite, and flow", () => {
     "plain"
   );
   assert.equal(
+    __test__.classifyMissionEntryMode(
+      buildConfig(),
+      "dispatcher",
+      "System (untrusted): [2026-04-22 17:36:45 GMT+8] Exec completed (tidal-ha, code 0) :: WSL2221 CLOSED"
+    ),
+    "plain"
+  );
+  assert.equal(
     __test__.classifyMissionEntryMode(buildConfig(), "dispatcher", "分析一下目前这个项目最可能的技术债是什么"),
     "mission-lite"
   );
