@@ -151,7 +151,7 @@ export function renderTimeline(el, uiState, data) {
         <summary class="task-summary">
           <div class="task-head">
             <div>
-              <div class="task-time">任务 ${index + 1} · ${esc(fmtTime(run.updatedAt || run.startedAt))}</div>
+              <div class="task-time">任务 ${index + 1} · ${esc(fmtTime(run.userAskedAt || run.startedAt || run.updatedAt))}</div>
               <h3>${esc(taskSummary)}</h3>
             </div>
             <div class="task-status ${esc(status)}">${esc(getStatusText(status))}</div>

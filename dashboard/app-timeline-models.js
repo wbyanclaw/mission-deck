@@ -9,6 +9,8 @@ import {
   getAgentDisplayName,
   getLatestBlocker,
   getLatestDispatch,
+  getDispatchesForRun,
+  getBlockersForRun,
   getFlowStepText,
   humanizeLatestDetail
 } from "./app-task-core.js?v=dashboard-live-20260422-4";
@@ -31,7 +33,7 @@ export function summarizeBlocker(reason) {
 
 export function buildWorkTreeRows(run, data) {
   const rows = [{
-    timestamp: run.startedAt,
+    timestamp: run.userAskedAt || run.startedAt,
     owner: "用户",
     role: "用户发起",
     text: deriveTaskSummary(run)
@@ -55,7 +57,7 @@ export function buildWorkTreeRows(run, data) {
     });
   }
 
-  for (const entry of (data.recentDispatches || []).filter((item) => item.runId === run.runId)) {
+  for (const entry of getDispatchesForRun(run, data)) {
     const targetName = getAgentDisplayName(data, entry.target?.agentId);
     rows.push({
       timestamp: entry.timestamp,
@@ -74,7 +76,7 @@ export function buildWorkTreeRows(run, data) {
     });
   }
 
-  for (const entry of (data.recentBlockers || []).filter((item) => item.runId === run.runId)) {
+  for (const entry of getBlockersForRun(run, data)) {
     rows.push({
       timestamp: entry.timestamp,
       owner: getAgentDisplayName(data, entry.agentId || run.agentId),

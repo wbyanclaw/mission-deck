@@ -9,6 +9,8 @@ import {
   spawnChild,
   startMissionFlow
 } from "../support/mission-deck-harness.js";
+import { applyChildOutcomeToParent } from "../lib/parent-reconciliation.js";
+import { countOpenChildTasks, updateDurableChildTask } from "../lib/flow-transition-helpers.js";
 
 async function openParentWithChild(harness, {
   parentRunId,
@@ -241,4 +243,86 @@ test("same-session root continuation reuses waiting mission-flow instead of crea
   const flow = harness.flows.get("flow-1");
   assert.equal(flow.currentStep, "planned");
   assert.equal(flow.stateJson.state, "planned");
+});
+
+test("parent reconciliation recomputes open-child count from latest flow snapshot before deciding closure", () => {
+  const parentState = {
+    flowId: "flow-1",
+    flowRevision: 4,
+    sessionKey: "agent:dispatcher:main",
+    entryMode: "mission-flow",
+    orchestrationMode: "delegate_once",
+    durable: {
+      state: "waiting_child",
+      childTasks: [
+        { taskId: "task-1", childSessionKey: "agent:builder:subagent:1", phase: "running", progressSummary: "Delegated via sessions_spawn" },
+        { taskId: "task-2", childSessionKey: "agent:reviewer:subagent:2", phase: "running", progressSummary: "Delegated via sessions_spawn" }
+      ],
+      receivedEvidenceCount: 0
+    },
+    childTasks: [
+      { taskId: "task-1", childSessionKey: "agent:builder:subagent:1", phase: "running", progressSummary: "Delegated via sessions_spawn" },
+      { taskId: "task-2", childSessionKey: "agent:reviewer:subagent:2", phase: "running", progressSummary: "Delegated via sessions_spawn" }
+    ],
+    childTaskIds: ["task-1", "task-2"],
+    timelineEvents: [],
+    activityTrail: [],
+    lastExternalMessage: "",
+    lastBlockReason: ""
+  };
+  const flow = {
+    flowId: "flow-1",
+    revision: 5,
+    status: "waiting",
+    currentStep: "waiting_child",
+    stateJson: {
+      state: "waiting_child",
+      childTasks: [
+        { taskId: "task-1", childSessionKey: "agent:builder:subagent:1", phase: "completed", progressSummary: "builder finished" },
+        { taskId: "task-2", childSessionKey: "agent:reviewer:subagent:2", phase: "running", progressSummary: "Delegated via sessions_spawn" }
+      ],
+      receivedEvidenceCount: 1
+    },
+    tasks: []
+  };
+  const transitions = [];
+  const result = applyChildOutcomeToParent({
+    api: {
+      runtime: {
+        taskFlow: {
+          bindSession() {
+            return {
+              get(flowId) {
+                return flowId === "flow-1" ? flow : null;
+              }
+            };
+          }
+        }
+      }
+    },
+    dashboard: { trackActiveRun() {} },
+    countOpenChildTasks,
+    shouldFinishParent() {
+      return false;
+    },
+    transitionFlow(_taskFlow, state, action, payload) {
+      transitions.push({ action, payload, state: JSON.parse(JSON.stringify(state.durable)) });
+      return { applied: true };
+    },
+    updateDurableChildTask
+  }, parentState, "dispatcher", {
+    childTaskId: "task-2",
+    childSessionKey: "agent:reviewer:subagent:2",
+    childAgentId: "reviewer",
+    phase: "completed",
+    summary: "reviewer finished",
+    updatedAt: "2026-04-22T07:10:00.000Z"
+  }, { sessionKey: "agent:dispatcher:main" });
+
+  assert.equal(result.nextState, "reviewing");
+  assert.equal(parentState.childTasks[0].phase, "completed");
+  assert.equal(parentState.childTasks[0].progressSummary, "builder finished");
+  assert.equal(parentState.childTasks[1].phase, "completed");
+  assert.equal(parentState.childTasks[1].progressSummary, "reviewer finished");
+  assert.equal(transitions[0].payload.currentStep, "reviewing");
 });

@@ -15,9 +15,8 @@
     "bin",
     "index.js",
     "lib",
-    "dashboard/index.html",
-    "dashboard/app.js",
-    "dashboard/styles.css",
+    "dashboard",
+    "scripts",
     "openclaw.plugin.json",
     "README.md",
     "README.zh-CN.md",
@@ -35,7 +34,8 @@
   ],
   "scripts": {
     "build": "npm run check",
-    "check": "node --check index.js && node --check bin/mission-deck-install.js && node --check lib/orchestrator-helpers.js && node --check lib/dashboard-store.js && node --check dashboard/app.js",
+    "check": "node --check index.js && node --check bin/mission-deck-install.js && node --check lib/orchestrator-helpers.js && node --check lib/dashboard-store.js && node --check dashboard/app.js && node --check scripts/repair-flow-state.js",
+    "repair:flow": "node scripts/repair-flow-state.js",
     "test": "node --test",
     "prepack": "npm run check && npm test",
     "pack:inspect": "npm pack --json"

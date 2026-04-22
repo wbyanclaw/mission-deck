@@ -113,6 +113,7 @@ h1 {
 .version-badge {
   display: inline-flex;
   align-items: center;
+  white-space: nowrap;
   padding: 6px 10px;
   border-radius: 999px;
   border: 1px solid rgba(15, 118, 110, 0.16);

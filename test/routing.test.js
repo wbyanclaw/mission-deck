@@ -120,6 +120,76 @@ test("after_tool_call registers child task into durable flow state", async () =>
   assert.equal(flow.stateJson.childTasks[0].agentId, "builder");
 });
 
+test("after_tool_call rejects reusing the same child lane across different parent flows", async () => {
+  const harness = await createHarness();
+
+  await startMissionFlow(harness, "run-parent-a");
+  await discoverSessions(harness, "run-parent-a");
+  await harness.emit(
+    "before_tool_call",
+    {
+      toolName: "sessions_spawn",
+      toolCallId: "tool-a",
+      params: { agentId: "builder", label: "fix-a", task: "修复 A" }
+    },
+    { agentId: "dispatcher", runId: "run-parent-a", sessionKey: "agent:dispatcher:main" }
+  );
+  await harness.emit(
+    "after_tool_call",
+    {
+      toolName: "sessions_spawn",
+      toolCallId: "tool-a",
+      params: { agentId: "builder", label: "fix-a", task: "修复 A" },
+      result: {
+        details: {
+          status: "accepted",
+          childSessionKey: "agent:builder:subagent:dedupe-1",
+          runId: "child-run-dedupe-1"
+        }
+      }
+    },
+    { agentId: "dispatcher", runId: "run-parent-a", sessionKey: "agent:dispatcher:main" }
+  );
+
+  const secondSessionKey = "agent:dispatcher:other-main";
+  await startMissionFlow(harness, "run-parent-b", "协调完成一个真实 E2E：让合适的子 agent 修复另一个构建失败并交付结果。", secondSessionKey);
+  await discoverSessions(harness, "run-parent-b", secondSessionKey);
+  await harness.emit(
+    "before_tool_call",
+    {
+      toolName: "sessions_spawn",
+      toolCallId: "tool-b",
+      params: { agentId: "builder", label: "fix-b", task: "修复 B" }
+    },
+    { agentId: "dispatcher", runId: "run-parent-b", sessionKey: secondSessionKey }
+  );
+  await harness.emit(
+    "after_tool_call",
+    {
+      toolName: "sessions_spawn",
+      toolCallId: "tool-b",
+      params: { agentId: "builder", label: "fix-b", task: "修复 B" },
+      result: {
+        details: {
+          status: "accepted",
+          childSessionKey: "agent:builder:subagent:dedupe-1",
+          runId: "child-run-dedupe-1"
+        }
+      }
+    },
+    { agentId: "dispatcher", runId: "run-parent-b", sessionKey: secondSessionKey }
+  );
+
+  const runTaskCalls = harness.taskFlowCalls.filter((entry) => entry.type === "runTask");
+  assert.equal(runTaskCalls.length, 1);
+  const secondCreateCall = harness.taskFlowCalls.filter((entry) => entry.type === "createManaged")[1];
+  assert.ok(secondCreateCall);
+  const secondFlow = harness.flows.get(secondCreateCall.flow.flowId);
+  assert.equal(secondFlow.currentStep, "blocked");
+  assert.equal(secondFlow.stateJson.state, "blocked");
+  assert.equal(secondFlow.stateJson.lastFailureKind, "child_link_conflict");
+});
+
 test("before_message_write rewrites premature replies when delegation evidence is missing", async () => {
   const harness = await createHarness();
   await startMissionFlow(harness, "run-rewrite-1");

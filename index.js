@@ -109,6 +109,9 @@ const plugin = {
       dashboardDataDir: {
         type: "string"
       },
+      flowRegistryPath: {
+        type: "string"
+      },
       taskflowSupervisor: {
         type: "object",
         additionalProperties: false,
@@ -178,6 +181,7 @@ const plugin = {
       retentionDays: pluginConfig?.dashboardRetentionDays,
       statusPath: pluginConfig?.dashboardStatusPath,
       dataDir: pluginConfig?.dashboardDataDir,
+      flowRegistryPath: pluginConfig?.flowRegistryPath,
       redactDashboardContent: pluginConfig?.redactDashboardContent,
       redactSessionKeys: pluginConfig?.redactSessionKeys,
       redactPromptMetadata: pluginConfig?.redactPromptMetadata,
@@ -194,6 +198,7 @@ const plugin = {
       findContinuableRootRun,
       rebindRunState,
       getBestEffortParentLink,
+      findConflictingChildLink,
       setBestEffortChildLink,
       deleteBestEffortChildLink,
       touchRun
@@ -267,6 +272,7 @@ const plugin = {
       enabledAgents,
       isSyntheticAnnounceRun,
       getBestEffortParentLink,
+      findConflictingChildLink,
       ensureFlowBound,
       syncFlowSnapshot,
       transitionFlow,

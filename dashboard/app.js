@@ -28,7 +28,7 @@ let lastGoodData = null;
 const uiState = createUiState();
 
 if (el.versionBadge) {
-  el.versionBadge.textContent = `Version: ${DASHBOARD_VERSION}`;
+  el.versionBadge.textContent = DASHBOARD_VERSION;
 }
 
 function renderUpdatedAt(value, suffix = "") {

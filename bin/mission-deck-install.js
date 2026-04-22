@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { stampDashboardVersion } from "../scripts/stamp-dashboard-version.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -177,6 +178,7 @@ async function executeInstall(argv, runtime = {}) {
     pluginId: PLUGIN_ID,
     pluginSource: PACKAGE_ROOT,
     pluginInstalled: false,
+    dashboardVersion: "",
     configUpdated: false,
     restartRequired: false,
     pluginDir,
@@ -212,6 +214,7 @@ async function executeInstall(argv, runtime = {}) {
 
   await installPluginTree(pluginDir);
   result.pluginInstalled = true;
+  result.dashboardVersion = await stampDashboardVersion(pluginDir);
 
   ensurePluginEntry(config, pluginDir);
   ensurePluginLoadPath(config, pluginDir);

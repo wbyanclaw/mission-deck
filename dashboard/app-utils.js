@@ -1,6 +1,7 @@
 export const STATUS_TEXT = {
   blocked: "需要关注",
   waiting: "处理中",
+  reviewing: "汇总中",
   completed: "已完成",
   delegated: "已分派",
   lane_open: "已建立处理通道",

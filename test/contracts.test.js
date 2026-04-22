@@ -158,3 +158,41 @@ test("applyDurableFlowToRun reconciles child task evidence from flow task detail
   assert.equal(run.durable.receivedEvidenceCount, 1);
   assert.equal(run.childTasks[0].progressSummary, "build fixed");
 });
+
+test("applyDurableFlowToRun does not downgrade terminal child evidence to running from stale task views", () => {
+  const run = __test__.defaultRunState();
+  const flow = {
+    flowId: "flow-1",
+    revision: 5,
+    status: "waiting",
+    currentStep: "waiting_child",
+    stateJson: {
+      state: "waiting_child",
+      childTasks: [
+        {
+          taskId: "task-child-1",
+          agentId: "builder",
+          childSessionKey: "agent:builder:subagent:1",
+          childRunId: "run-child-1",
+          phase: "completed",
+          progressSummary: "child finished"
+        }
+      ],
+      receivedEvidenceCount: 1
+    },
+    tasks: [
+      {
+        id: "task-child-1",
+        agentId: "builder",
+        childSessionKey: "agent:builder:subagent:1",
+        runId: "run-child-1",
+        status: "running",
+        progressSummary: "Delegated via sessions_spawn"
+      }
+    ]
+  };
+  __test__.applyDurableFlowToRun(run, flow);
+  assert.equal(run.childTasks[0].phase, "completed");
+  assert.equal(run.durable.receivedEvidenceCount, 1);
+  assert.equal(run.childTasks[0].progressSummary, "child finished");
+});

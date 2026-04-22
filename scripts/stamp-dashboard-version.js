@@ -6,17 +6,16 @@ import { fileURLToPath } from "node:url";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const PACKAGE_ROOT = path.resolve(__dirname, "..");
-const DASHBOARD_DIR = path.join(PACKAGE_ROOT, "dashboard");
-const APP_JS = path.join(DASHBOARD_DIR, "app.js");
-const INDEX_HTML = path.join(DASHBOARD_DIR, "index.html");
-const JS_FILES = [
+const DEFAULT_PACKAGE_ROOT = path.resolve(__dirname, "..");
+const DASHBOARD_FILES = [
   "app.js",
+  "app-dom.js",
   "app-graph-models.js",
   "app-renderers.js",
   "app-task-core.js",
-  "app-timeline-models.js"
-].map((name) => path.join(DASHBOARD_DIR, name));
+  "app-timeline-models.js",
+  "app-utils.js"
+];
 
 function pad(value) {
   return String(value).padStart(2, "0");
@@ -35,8 +34,8 @@ function buildStamp(date = new Date()) {
   return `dashboard-live-${timestamp}-${random}`;
 }
 
-async function readPackageVersion() {
-  const raw = await readFile(path.join(PACKAGE_ROOT, "package.json"), "utf8");
+async function readPackageVersion(packageRoot) {
+  const raw = await readFile(path.join(packageRoot, "package.json"), "utf8");
   return JSON.parse(raw).version || "0.0.0";
 }
 
@@ -46,20 +45,54 @@ async function replaceInFile(filePath, replacer) {
   if (after !== before) await writeFile(filePath, after, "utf8");
 }
 
-const pkgVersion = await readPackageVersion();
-const stamp = buildStamp();
-const dashboardVersion = `v${pkgVersion}+${stamp}`;
-
-for (const filePath of JS_FILES) {
-  await replaceInFile(filePath, (source) => source.replaceAll(/dashboard-live-[a-z0-9-]+/g, stamp));
+function parseArgs(argv) {
+  const out = {
+    root: DEFAULT_PACKAGE_ROOT
+  };
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (arg === "--root") out.root = path.resolve(argv[++i] || "");
+    else if (arg === "--help" || arg === "-h") out.help = true;
+    else throw new Error(`Unknown argument: ${arg}`);
+  }
+  return out;
 }
 
-await replaceInFile(APP_JS, (source) =>
-  source.replace(/const DASHBOARD_VERSION = ".*?";/, `const DASHBOARD_VERSION = "${dashboardVersion}";`)
-);
+async function stampDashboardVersion(packageRoot = DEFAULT_PACKAGE_ROOT) {
+  const dashboardDir = path.join(packageRoot, "dashboard");
+  const appJs = path.join(dashboardDir, "app.js");
+  const indexHtml = path.join(dashboardDir, "index.html");
+  const pkgVersion = await readPackageVersion(packageRoot);
+  const stamp = buildStamp();
+  const dashboardVersion = `v${pkgVersion}+${stamp}`;
 
-await replaceInFile(INDEX_HTML, (source) =>
-  source.replaceAll(/dashboard-live-[a-z0-9-]+/g, stamp)
-);
+  for (const filePath of DASHBOARD_FILES.map((name) => path.join(dashboardDir, name))) {
+    await replaceInFile(filePath, (source) => source.replaceAll(/dashboard-live-[a-z0-9-]+/g, stamp));
+  }
 
-process.stdout.write(`${dashboardVersion}\n`);
+  await replaceInFile(appJs, (source) =>
+    source.replace(/const DASHBOARD_VERSION = ".*?";/, `const DASHBOARD_VERSION = "${dashboardVersion}";`)
+  );
+
+  await replaceInFile(indexHtml, (source) =>
+    source.replaceAll(/dashboard-live-[a-z0-9-]+/g, stamp)
+  );
+
+  return dashboardVersion;
+}
+
+const isDirectRun = process.argv[1] && path.resolve(process.argv[1]) === __filename;
+
+export {
+  stampDashboardVersion
+};
+
+if (isDirectRun) {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    process.stdout.write("stamp-dashboard-version [--root <plugin-dir>]\n");
+  } else {
+    const dashboardVersion = await stampDashboardVersion(args.root);
+    process.stdout.write(`${dashboardVersion}\n`);
+  }
+}
