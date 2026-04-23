@@ -5,6 +5,12 @@ export function getAgentStateTone(agent) {
   return agent.state === "busy" ? "busy" : "idle";
 }
 
+function isRecentDispatchActive(entry, nowMs = Date.now()) {
+  const timestamp = new Date(entry?.timestamp || "").getTime();
+  if (!Number.isFinite(timestamp)) return false;
+  return nowMs - timestamp < 15 * 60 * 1000;
+}
+
 export function getOrgOrder(agent) {
   return Number(agent?.orderIndex ?? 999);
 }
@@ -55,7 +61,9 @@ export function deriveOrgHierarchy(agents) {
 
 export function buildGraphModel(data) {
   const agents = Array.isArray(data.agentRoster) ? data.agentRoster : [];
+  const agentById = new Map(agents.map((agent) => [agent.agentId, agent]));
   const dispatches = Array.isArray(data.recentDispatches) ? data.recentDispatches : [];
+  const nowMs = Date.now();
   const positions = new Map();
   const width = 760;
   const { root, parentById, levelById } = deriveOrgHierarchy(agents);
@@ -87,24 +95,39 @@ export function buildGraphModel(data) {
       });
     });
   });
-  const edges = dispatches
-    .map((entry) => ({
-      from: entry.agentId,
-      to: entry.target?.agentId,
-      timestamp: entry.timestamp,
-      status: entry.status,
-      routeType: entry.target?.routeType || ""
-    }))
-    .filter((edge) => edge.from && edge.to && positions.has(edge.from) && positions.has(edge.to));
-  const orgEdges = agents
+  const dispatchByPair = new Map();
+  for (const entry of dispatches) {
+    const from = entry.agentId;
+    const to = entry.target?.agentId;
+    if (!from || !to || !positions.has(from) || !positions.has(to)) continue;
+    const key = `${from}->${to}`;
+    const previous = dispatchByPair.get(key);
+    if (!previous || String(entry.timestamp || "") > String(previous.timestamp || "")) {
+      dispatchByPair.set(key, {
+        from,
+        to,
+        timestamp: entry.timestamp,
+        status: entry.status,
+        routeType: entry.target?.routeType || ""
+      });
+    }
+  }
+  const edges = agents
     .filter((agent) => parentById.has(agent.agentId))
-    .map((agent) => ({
-      from: parentById.get(agent.agentId),
-      to: agent.agentId,
-      kind: "org"
-    }))
+    .map((agent) => {
+      const dispatch = dispatchByPair.get(`${parentById.get(agent.agentId)}->${agent.agentId}`) || null;
+      const recentDispatch = dispatch && isRecentDispatchActive(dispatch, nowMs) ? dispatch : null;
+      const childAgent = agentById.get(agent.agentId);
+      return {
+        from: parentById.get(agent.agentId),
+        to: agent.agentId,
+        kind: "org",
+        dispatch: recentDispatch,
+        active: Boolean(recentDispatch || childAgent?.state === "busy")
+      };
+    })
     .filter((edge) => edge.from && edge.to);
-  return { width, height, positions, edges, orgEdges, topAgent: root };
+  return { width, height, positions, edges, topAgent: root };
 }
 
 export function formatGraphNodeTitle(agent) {

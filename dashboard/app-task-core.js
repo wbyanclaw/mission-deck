@@ -298,6 +298,11 @@ export function getRouteLabel(target) {
 }
 
 export function humanizeLatestDetail(run, latestBlocker) {
+  const effectiveStatus = getEffectiveStatus(run);
+  if (effectiveStatus === "completed") return "已完成交付。";
+  if (effectiveStatus === "blocked") return "任务当前被阻塞，需要决策或新的输入。";
+  if (effectiveStatus === "reviewing") return "主控正在汇总最终结果。";
+  if (effectiveStatus === "waiting") return "等待子任务反馈或新的输入。";
   if (run.flowWaitSummary) return run.flowWaitSummary;
   if (latestBlocker?.reason) return latestBlocker.reason;
   if (run.lastExternalMessage) return run.lastExternalMessage;
@@ -319,7 +324,6 @@ export function humanizeLatestDetail(run, latestBlocker) {
     return "已发出跟进动作，正在等待结果。";
   }
 
-  if (run.status === "blocked") return "任务当前被阻塞，需要决策或新的输入。";
   if (run.lastEvent) return "任务仍在推进，最新步骤已记录。";
   return "任务仍在处理中。";
 }
@@ -470,8 +474,14 @@ export function getCurrentOwner(run, data) {
 }
 
 export function getCurrentProgress(run, data) {
-  if (run.flowWaitSummary) return run.flowWaitSummary;
-  if (getFlowStepText(run)) return `当前阶段：${getFlowStepText(run)}`;
+  const effectiveStatus = getEffectiveStatus(run);
+  if (effectiveStatus === "completed") return "已完成交付。";
+  if (effectiveStatus === "blocked") return humanizeLatestDetail(run, getLatestBlocker(run, data));
+  if (effectiveStatus === "reviewing") return "主控正在汇总最终结果。";
+  if (effectiveStatus === "waiting" && run.flowWaitSummary) return run.flowWaitSummary;
+  if (effectiveStatus !== "completed" && effectiveStatus !== "blocked" && getFlowStepText(run)) {
+    return `当前阶段：${getFlowStepText(run)}`;
+  }
   return run.childTasks?.at?.(-1)?.progressSummary ||
     run.lastExternalMessage ||
     humanizeLatestDetail(run, getLatestBlocker(run, data));

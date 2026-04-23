@@ -6,8 +6,10 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 
 import { canTreatWaitingRunAsCompleted, createDashboardStore } from "../lib/dashboard-store.js";
-import { mergeLiveRuns } from "../lib/dashboard-summary.js";
-import { buildTaskCards, buildTaskChain } from "../dashboard/app-task-core.js";
+import { buildAgentRoster, mergeLiveRuns } from "../lib/dashboard-summary.js";
+import { buildGraphModel } from "../dashboard/app-graph-models.js";
+import { buildTaskCards, buildTaskChain, getCurrentProgress } from "../dashboard/app-task-core.js";
+import { fmtTime } from "../dashboard/app-utils.js";
 
 test("dashboard flush remains stable under concurrent writes", async () => {
   const tempRoot = await mkdtemp(join(tmpdir(), "mission-deck-dashboard-"));
@@ -228,8 +230,8 @@ test("dashboard flush rebuilds taskflow-backed runs from flow registry", async (
   assert.equal(snapshot.activeRuns[0].status, "reviewing");
   assert.equal(snapshot.activeRuns[0].childTasks[0].phase, "delivered");
   const mainAgent = snapshot.agentRoster.find((entry) => entry.agentId === "main");
-  assert.equal(mainAgent?.state, "idle");
-  assert.equal(mainAgent?.activeRuns, 0);
+  assert.equal(mainAgent?.state, "busy");
+  assert.equal(mainAgent?.activeRuns, 1);
 });
 
 test("task chain includes coordinator final reply and user delivery nodes", () => {
@@ -662,4 +664,157 @@ test("task card sorting ignores invalid asked-time text and falls back to starte
   });
 
   assert.deepEqual(tasks.map((task) => task.flowId), ["flow-a", "flow-b"]);
+});
+
+test("graph model keeps a single org edge per relationship and uses the latest dispatch", () => {
+  const now = Date.now();
+  const model = buildGraphModel({
+    agentRoster: [
+      { agentId: "main", displayName: "招钳", isDefault: true, orderIndex: 0, allowAgents: ["coder", "sale"], state: "busy" },
+      { agentId: "coder", displayName: "码钳", orderIndex: 1, allowAgents: [], state: "idle" },
+      { agentId: "sale", displayName: "销钳", orderIndex: 2, allowAgents: [], state: "busy" }
+    ],
+    recentDispatches: [
+      {
+        timestamp: new Date(now - 5 * 60_000).toISOString(),
+        agentId: "main",
+        target: { agentId: "coder", routeType: "spawn" }
+      },
+      {
+        timestamp: new Date(now - 60_000).toISOString(),
+        agentId: "main",
+        target: { agentId: "coder", routeType: "send" }
+      },
+      {
+        timestamp: new Date(now - 2 * 60_000).toISOString(),
+        agentId: "main",
+        target: { agentId: "sale", routeType: "spawn" }
+      }
+    ]
+  });
+
+  assert.equal(model.edges.length, 2);
+  assert.deepEqual(
+    model.edges.map((edge) => ({
+      from: edge.from,
+      to: edge.to,
+      timestamp: edge.dispatch?.timestamp || null,
+      active: edge.active
+    })),
+    [
+      { from: "main", to: "coder", timestamp: new Date(now - 60_000).toISOString(), active: true },
+      { from: "main", to: "sale", timestamp: new Date(now - 2 * 60_000).toISOString(), active: true }
+    ]
+  );
+});
+
+test("graph model keeps org edge active for busy child agents without recent dispatch", () => {
+  const model = buildGraphModel({
+    agentRoster: [
+      { agentId: "main", displayName: "招钳", isDefault: true, orderIndex: 0, allowAgents: ["invest"] },
+      { agentId: "invest", displayName: "金钳", orderIndex: 1, allowAgents: [], state: "busy" }
+    ],
+    recentDispatches: [
+      {
+        timestamp: "2026-04-22T00:00:00.000Z",
+        agentId: "main",
+        target: { agentId: "invest", routeType: "spawn" }
+      }
+    ]
+  });
+
+  assert.equal(model.edges.length, 1);
+  assert.equal(model.edges[0].dispatch, null);
+  assert.equal(model.edges[0].active, true);
+});
+
+test("agent roster ignores non-taskflow fragments when computing busy state", () => {
+  const roster = buildAgentRoster(
+    [{ agentId: "coder", displayName: "码钳", orderIndex: 0 }],
+    [{ agentId: "coder", activeRuns: 3, delegatedRuns: 0, blockedRuns: 0, childTasks: 0, updatedAt: "2026-04-23T02:44:56.844Z" }],
+    [
+      {
+        runId: "run-fragment-1",
+        agentId: "coder",
+        flowId: "",
+        taskFlowSeen: false,
+        status: "coordinating",
+        updatedAt: "2026-04-23T02:44:56.844Z"
+      },
+      {
+        runId: "run-fragment-2",
+        agentId: "coder",
+        flowId: "",
+        taskFlowSeen: false,
+        status: "triaging",
+        updatedAt: "2026-04-23T02:43:54.665Z"
+      }
+    ],
+    [],
+    []
+  );
+
+  assert.equal(roster[0].state, "idle");
+  assert.equal(roster[0].activeRuns, 0);
+});
+
+test("agent roster marks busy for visible taskflow execution and recent dispatches", () => {
+  const roster = buildAgentRoster(
+    [
+      { agentId: "main", displayName: "主钳", orderIndex: 0 },
+      { agentId: "coder", displayName: "码钳", orderIndex: 1 }
+    ],
+    [
+      { agentId: "main", activeRuns: 1, delegatedRuns: 0, blockedRuns: 0, childTasks: 0, updatedAt: "2026-04-23T02:44:56.844Z" },
+      { agentId: "coder", activeRuns: 0, delegatedRuns: 0, blockedRuns: 0, childTasks: 0, updatedAt: "" }
+    ],
+    [
+      {
+        runId: "run-flow-1",
+        agentId: "main",
+        flowId: "flow-1",
+        taskFlowSeen: true,
+        hiddenInDashboard: false,
+        parentFlowId: "",
+        status: "reviewing",
+        flowStatus: "waiting",
+        flowCurrentStep: "reviewing",
+        updatedAt: "2026-04-23T02:44:56.844Z"
+      }
+    ],
+    [
+      {
+        timestamp: new Date(Date.now() - 60_000).toISOString(),
+        agentId: "coder",
+        target: { agentId: "sale" }
+      }
+    ],
+    []
+  );
+
+  const main = roster.find((entry) => entry.agentId === "main");
+  const coder = roster.find((entry) => entry.agentId === "coder");
+  assert.equal(main?.state, "busy");
+  assert.equal(main?.activeRuns, 1);
+  assert.equal(coder?.state, "busy");
+  assert.equal(coder?.activeRuns, 0);
+});
+
+test("fmtTime always renders in Asia/Shanghai", () => {
+  assert.equal(fmtTime("2026-04-22T03:44:00.000Z"), "2026-04-22 11:44");
+});
+
+test("completed task progress does not regress to processing text", () => {
+  const progress = getCurrentProgress(
+    {
+      status: "completed",
+      flowCurrentStep: "completed",
+      flowWaitSummary: "",
+      childTasks: [],
+      lastExternalMessage: ""
+    },
+    { recentDispatches: [], recentBlockers: [] }
+  );
+
+  assert.equal(progress, "已完成交付。");
 });

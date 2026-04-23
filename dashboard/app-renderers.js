@@ -90,8 +90,7 @@ export function renderGraph(el, data) {
   const edges = model.edges.map((edge) => {
     const from = model.positions.get(edge.from);
     const to = model.positions.get(edge.to);
-    const active = Date.now() - new Date(edge.timestamp).getTime() < 15 * 60 * 1000;
-    return { ...edge, from, to, active };
+    return { ...edge, from, to, active: Boolean(edge.active) };
   });
   el.graph.innerHTML = `
     <svg viewBox="0 0 ${model.width} ${model.height}" class="graph-svg" role="img" aria-label="OpenClaw 协作关系图">
@@ -100,27 +99,18 @@ export function renderGraph(el, data) {
           <path d="M0,0 L0,6 L8,3 z" class="graph-arrow" />
         </marker>
       </defs>
-      ${model.orgEdges.map((edge) => {
-        const from = model.positions.get(edge.from);
-        const to = model.positions.get(edge.to);
-        const midY = Math.round((from.y + to.y) / 2);
-        return `
-          <g class="graph-edge org">
-            <path d="M${from.x},${from.y + 38} C${from.x},${midY} ${to.x},${midY} ${to.x},${to.y - 38}"></path>
-          </g>
-        `;
-      }).join("")}
       ${edges.map((edge) => {
         const midY = Math.round((edge.from.y + edge.to.y) / 2);
         return `
           <g class="graph-edge ${edge.active ? "active" : ""}">
-            <path d="M${edge.from.x},${edge.from.y + 38} C${edge.from.x},${midY} ${edge.to.x},${midY} ${edge.to.x},${edge.to.y - 38}" marker-end="url(#arrow)"></path>
+            <path d="M${edge.from.x},${edge.from.y + 38} C${edge.from.x},${midY} ${edge.to.x},${midY} ${edge.to.x},${edge.to.y - 38}" ${edge.active ? `marker-end="url(#arrow)"` : ""}></path>
           </g>
         `;
       }).join("")}
       ${nodes.map(({ agent, pos }) => `
-        <g class="graph-node ${agent.state === "busy" ? "busy" : "idle"}">
+        <g class="graph-node ${esc(agent.state === "busy" ? "busy" : "idle")}">
           <rect x="${pos.x - 74}" y="${pos.y - 34}" rx="18" ry="18" width="148" height="68"></rect>
+          <circle class="graph-node-status" cx="${pos.x + 52}" cy="${pos.y - 16}" r="5"></circle>
           <text x="${pos.x}" y="${pos.y - 8}" class="node-title">${esc(formatGraphNodeTitle(agent))}</text>
           <text x="${pos.x}" y="${pos.y + 10}" class="node-role">${esc(agent.theme || agent.agentId)}</text>
         </g>

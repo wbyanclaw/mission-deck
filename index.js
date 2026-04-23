@@ -1,3 +1,7 @@
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+
 import { createDashboardStore } from "./lib/dashboard-store.js";
 import {
   DEFAULT_DISCOVERY_TOOL_NAMES,
@@ -177,6 +181,84 @@ const plugin = {
         orderIndex: index
       }));
 
+    const usesExplicitDashboardPaths = Boolean(normalizeString(pluginConfig?.dashboardStatusPath));
+    const taskRunRegistryPath = normalizeString(pluginConfig?.taskRunRegistryPath) ||
+      (usesExplicitDashboardPaths ? "" : join(homedir(), ".openclaw", "tasks", "runs.sqlite"));
+    const flowRegistryPath = normalizeString(pluginConfig?.flowRegistryPath) ||
+      (usesExplicitDashboardPaths ? "" : join(homedir(), ".openclaw", "flows", "registry.sqlite"));
+
+    function extractAgentIdFromOwnerKey(ownerKey) {
+      const normalized = normalizeString(ownerKey);
+      if (!normalized) return "";
+      const parts = normalized.split(":");
+      return normalizeString(parts[1]);
+    }
+
+    function lookupPersistedChildLink(runId, sessionKey) {
+      if (!taskRunRegistryPath) return null;
+      const normalizedRunId = normalizeString(runId);
+      const normalizedSessionKey = normalizeString(sessionKey);
+      if (!normalizedRunId && !normalizedSessionKey) return null;
+
+      let taskDb;
+      try {
+        taskDb = new DatabaseSync(taskRunRegistryPath, { readonly: true });
+        const row = taskDb.prepare(`
+          SELECT task_id, parent_flow_id, owner_key, child_session_key, run_id, agent_id, created_at
+          FROM task_runs
+          WHERE parent_flow_id <> ''
+            AND (
+              (? <> '' AND run_id = ?)
+              OR (? <> '' AND child_session_key = ?)
+            )
+          ORDER BY
+            CASE WHEN owner_key = child_session_key THEN 1 ELSE 0 END ASC,
+            created_at DESC
+          LIMIT 1
+        `).get(
+          normalizedRunId,
+          normalizedRunId,
+          normalizedSessionKey,
+          normalizedSessionKey
+        );
+        if (!row?.parent_flow_id || !row?.task_id) return null;
+
+        let parentRunId = "";
+        if (flowRegistryPath) {
+          let flowDb;
+          try {
+            flowDb = new DatabaseSync(flowRegistryPath, { readonly: true });
+            const flowRow = flowDb.prepare(`
+              SELECT json_extract(state_json, '$.rootRunId') AS root_run_id
+              FROM flow_runs
+              WHERE flow_id = ?
+              LIMIT 1
+            `).get(normalizeString(row.parent_flow_id));
+            parentRunId = normalizeString(flowRow?.root_run_id);
+          } catch {
+            parentRunId = "";
+          } finally {
+            flowDb?.close();
+          }
+        }
+
+        return {
+          parentRunId,
+          parentFlowId: normalizeString(row.parent_flow_id),
+          parentAgentId: extractAgentIdFromOwnerKey(row.owner_key),
+          parentSessionKey: normalizeString(row.owner_key),
+          childTaskId: normalizeString(row.task_id),
+          childRunId: normalizeString(row.run_id),
+          childSessionKey: normalizeString(row.child_session_key),
+          childAgentId: normalizeString(row.agent_id)
+        };
+      } catch {
+        return null;
+      } finally {
+        taskDb?.close();
+      }
+    }
+
     const dashboard = createDashboardStore(api.logger, {
       retentionDays: pluginConfig?.dashboardRetentionDays,
       statusPath: pluginConfig?.dashboardStatusPath,
@@ -207,7 +289,8 @@ const plugin = {
       latestRunByAgent,
       bestEffortChildLinksByRun,
       bestEffortChildLinksBySession,
-      dashboard
+      dashboard,
+      lookupPersistedChildLink
     });
 
     const {

@@ -9,8 +9,10 @@ import {
   spawnChild,
   startMissionFlow
 } from "../support/mission-deck-harness.js";
+import { createAgentEndHandler } from "../lib/agent-end-handler.js";
 import { applyChildOutcomeToParent } from "../lib/parent-reconciliation.js";
 import { countOpenChildTasks, updateDurableChildTask } from "../lib/flow-transition-helpers.js";
+import { createRuntimeRegistry } from "../lib/runtime-registry.js";
 
 async function openParentWithChild(harness, {
   parentRunId,
@@ -243,6 +245,86 @@ test("same-session root continuation reuses waiting mission-flow instead of crea
   const flow = harness.flows.get("flow-1");
   assert.equal(flow.currentStep, "planned");
   assert.equal(flow.stateJson.state, "planned");
+});
+
+test("agent_end reconciles child outcome when parent link is only available from registry lookup", async () => {
+  const runtimeRuns = new Map([
+    ["child-run-1", {
+      engineeringTask: true,
+      entryMode: "mission-lite",
+      parentRunId: "",
+      parentTaskId: "",
+      parentFlowId: "",
+      parentAgentId: "",
+      lastExternalMessage: "子任务已完成",
+      lastBlockReason: ""
+    }]
+  ]);
+  const applied = [];
+  const attached = [];
+  const parentState = { flowId: "flow-parent", agentId: "dispatcher" };
+  const handler = createAgentEndHandler({
+    dashboard: {
+      attachChildOutcome: async (outcome) => { attached.push(outcome); },
+      trackActiveRun() {},
+      archiveRun: async () => {},
+      flush: async () => {}
+    },
+    runtimeRuns,
+    isSyntheticAnnounceRun: () => false,
+    getBestEffortParentLinkFromRegistry: () => ({
+      parentRunId: "",
+      parentFlowId: "flow-parent",
+      parentAgentId: "dispatcher",
+      childTaskId: "task-1",
+      childSessionKey: "agent:builder:subagent:1"
+    }),
+    findParentRunByChildLink: () => null,
+    reviveParentRun: () => parentState,
+    applyChildOutcomeToParent: (_state, _parentAgentId, outcome) => { applied.push(outcome); },
+    countOpenChildTasks: () => 0,
+    buildCollaborationRequirementReason: () => "",
+    lacksRequiredCollaborationEvidence: () => false,
+    shouldFinishParent: () => false,
+    shouldRetainRuntimeState: () => true,
+    syncFlowSnapshot: () => {},
+    transitionFlow: () => {},
+    ensureFlowBound: () => null,
+    deleteBestEffortChildLink: () => {}
+  });
+
+  await handler({}, { agentId: "builder", runId: "child-run-1", sessionKey: "agent:builder:subagent:1" });
+
+  assert.equal(applied.length, 1);
+  assert.equal(applied[0].parentRunId, "flow-parent");
+  assert.equal(applied[0].childTaskId, "task-1");
+  assert.equal(attached.length, 1);
+  assert.equal(attached[0].parentRunId, "flow-parent");
+});
+
+test("runtime registry falls back to persisted child link lookup when memory link is missing", () => {
+  const registry = createRuntimeRegistry({
+    runtimeRuns: new Map(),
+    latestRunByAgent: new Map(),
+    bestEffortChildLinksByRun: new Map(),
+    bestEffortChildLinksBySession: new Map(),
+    dashboard: { trackActiveRun() {} },
+    lookupPersistedChildLink: (runId, sessionKey) => (
+      runId === "child-run-2" && sessionKey === "agent:builder:subagent:2"
+        ? {
+            parentRunId: "run-parent-2",
+            parentFlowId: "flow-parent-2",
+            childTaskId: "task-2",
+            childSessionKey: sessionKey
+          }
+        : null
+    )
+  });
+
+  const link = registry.getBestEffortParentLink("child-run-2", "agent:builder:subagent:2");
+  assert.equal(link?.parentRunId, "run-parent-2");
+  assert.equal(link?.parentFlowId, "flow-parent-2");
+  assert.equal(link?.childTaskId, "task-2");
 });
 
 test("parent reconciliation recomputes open-child count from latest flow snapshot before deciding closure", () => {
