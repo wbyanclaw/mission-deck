@@ -1,4 +1,4 @@
-import { getAgentDisplayName } from "./app-task-core.js?v=dashboard-live-20260422-4";
+import { getAgentDisplayName } from "./app-task-core.js?v=dashboard-live-20260424202409-g32df9";
 
 export function getAgentStateTone(agent) {
   if (agent.blockedRuns > 0) return "risk";

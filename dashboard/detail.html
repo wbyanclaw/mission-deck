@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>MISSION DECK DETAIL</title>
+    <link rel="stylesheet" href="./styles.css?v=dashboard-live-20260424192000-sessionfilters" />
+  </head>
+  <body>
+    <main class="page detail-page">
+      <header class="hero detail-hero">
+        <div>
+          <div class="eyebrow">MISSION DECK | 详情页</div>
+          <h1 id="detailTitle">加载中</h1>
+          <p id="detailSub" class="sub">正在读取完整链路。</p>
+        </div>
+        <div class="hero-side">
+          <a class="detail-link back-link" href="./index.html">返回看板</a>
+          <div id="detailGeneratedAt" class="generated">更新时间：-</div>
+        </div>
+      </header>
+
+      <section id="detailContent" class="section"></section>
+    </main>
+
+    <script type="module">
+      await import("./app-detail.js?v=dashboard-live-20260424192000-sessionfilters");
+    </script>
+  </body>
+</html>

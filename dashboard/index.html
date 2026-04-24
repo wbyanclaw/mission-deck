@@ -7,7 +7,7 @@
     <meta http-equiv="Pragma" content="no-cache" />
     <meta http-equiv="Expires" content="0" />
     <title>MISSION DECK</title>
-    <link rel="stylesheet" href="./styles.css?v=dashboard-live-20260422-4" />
+    <link rel="stylesheet" href="./styles.css?v=dashboard-live-20260424202409-g32df9" />
   </head>
   <body>
     <main class="page">
@@ -42,10 +42,35 @@
 
           <section class="section">
             <div class="section-head">
-              <h2>任务状态</h2>
-              <span id="task-count" class="hint">0 项</span>
+              <h2>状态面板</h2>
+              <div class="tabs" role="tablist" aria-label="状态切换">
+                <button id="tab-tasks" class="tab-button is-active" type="button" role="tab" aria-selected="true">任务状态</button>
+                <button id="tab-sessions" class="tab-button" type="button" role="tab" aria-selected="false">会话状态</button>
+              </div>
             </div>
-            <div id="timeline" class="timeline"></div>
+            <div id="tasks-panel" class="tab-panel is-active" role="tabpanel">
+              <div class="section-head inner-head">
+                <span class="hint">任务状态</span>
+                <span id="task-count" class="hint">0 项</span>
+              </div>
+              <div id="timeline" class="timeline"></div>
+            </div>
+            <div id="sessions-panel" class="tab-panel" role="tabpanel" hidden>
+              <div class="section-head inner-head">
+                <div class="sessions-tools">
+                  <span class="hint">会话状态</span>
+                </div>
+                <span id="direct-count" class="hint">0 项</span>
+              </div>
+              <div class="session-filter-bar">
+                <button type="button" class="session-filter-chip is-active" data-session-kind="direct">直聊</button>
+                <button type="button" class="session-filter-chip is-active" data-session-kind="cron">定时</button>
+                <button type="button" class="session-filter-chip is-active" data-session-kind="system">系统</button>
+                <button type="button" class="session-filter-chip is-active" data-session-kind="empty">回执</button>
+                <button type="button" class="session-filter-chip" data-session-kind="heartbeat">心跳</button>
+              </div>
+              <div id="directSessions" class="direct-grid"></div>
+            </div>
           </section>
         </div>
 
@@ -62,7 +87,7 @@
     </main>
 
     <script type="module">
-      await import("./app.js?v=dashboard-live-20260422-4");
+      await import("./app.js?v=dashboard-live-20260424202409-g32df9");
     </script>
   </body>
 </html>

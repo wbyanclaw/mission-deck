@@ -4,24 +4,27 @@ import {
   renderEmpty,
   shouldIgnoreSnapshot,
   timeAgo
-} from "./app-utils.js?v=dashboard-live-20260422-4";
+} from "./app-utils.js?v=dashboard-live-20260424202409-g32df9";
 import {
+  bindTabs,
+  bindSessionFilters,
   bindTimelineToggle,
   captureUiState,
   createUiState,
   getDashboardElements
-} from "./app-dom.js?v=dashboard-live-20260422-4";
+} from "./app-dom.js?v=dashboard-live-20260424202409-g32df9";
 import {
+  renderDirectSessions,
   renderAgents,
   renderGraph,
   renderHero,
   renderSummary,
   renderTimeline
-} from "./app-renderers.js?v=dashboard-live-20260422-4";
+} from "./app-renderers.js?v=dashboard-live-20260424202409-g32df9";
 
 const el = getDashboardElements();
 
-const DASHBOARD_VERSION = "v0.1.0+patch4";
+const DASHBOARD_VERSION = "v0.2.0+dashboard-live-20260424202409-g32df9";
 
 let lastGeneratedAt = "";
 let lastGoodData = null;
@@ -46,6 +49,7 @@ function applyDashboard(data) {
   renderAgents(el, data);
   renderGraph(el, data);
   renderTimeline(el, uiState, data);
+  renderDirectSessions(el, uiState, data);
 }
 
 async function loadDashboard() {
@@ -75,6 +79,7 @@ async function loadDashboard() {
     renderEmpty(el.agents, "等待数据中");
     renderEmpty(el.graph, "等待数据中");
     renderEmpty(el.timeline, `暂时无法加载：${error.message}`);
+    renderEmpty(el.directSessions, "等待数据中");
   }
 }
 
@@ -83,3 +88,7 @@ setInterval(() => renderUpdatedAt(lastGeneratedAt), 1000);
 setInterval(loadDashboard, 3000);
 
 bindTimelineToggle();
+bindTabs(el, uiState);
+bindSessionFilters(el, uiState, () => {
+  if (lastGoodData) applyDashboard(lastGoodData);
+});

@@ -55,7 +55,7 @@ test("installer apply with verify copies plugin tree and writes config entry", a
   assert.equal(result.stdoutJson.pluginInstalled, true);
   assert.equal(result.stdoutJson.configUpdated, true);
   assert.equal(result.stdoutJson.verification?.ok, true);
-  assert.match(result.stdoutJson.dashboardVersion, /^v0\.1\.0\+dashboard-live-\d{14}-[a-z0-9]{6}$/);
+  assert.match(result.stdoutJson.dashboardVersion, /^v0\.2\.0\+dashboard-live-\d{14}-[a-z0-9]{6}$/);
 
   const configAfter = JSON.parse(await readFile(join(home, "openclaw.json"), "utf8"));
   const pluginEntry = configAfter?.plugins?.entries?.["mission-deck"];
@@ -66,7 +66,7 @@ test("installer apply with verify copies plugin tree and writes config entry", a
     true
   );
   const dashboardApp = await readFile(join(home, "extensions", "mission-deck", "dashboard", "app.js"), "utf8");
-  assert.match(dashboardApp, /const DASHBOARD_VERSION = "v0\.1\.0\+dashboard-live-\d{14}-[a-z0-9]{6}";/);
+  assert.match(dashboardApp, /const DASHBOARD_VERSION = "v0\.2\.0\+dashboard-live-\d{14}-[a-z0-9]{6}";/);
 });
 
 test("installer excludes release tarballs from local checkout copies", async () => {

@@ -125,6 +125,14 @@ function isInternalOnlyCompletionText(value) {
     text.includes("no blocker surfaced from the result");
 }
 
+function buildMissingVisibleReplyReason(currentState, childTasks) {
+  const existing = normalizeString(currentState?.lastFailureReason);
+  if (existing) return existing;
+  const evidenceCount = childTasks.filter((task) => isTerminalPhase(task?.phase)).length;
+  if (evidenceCount > 0) return "agent run ended after collecting evidence but before sending a visible reply";
+  return "agent run ended without sending a visible reply";
+}
+
 function buildCanonicalChildTasks(rows) {
   const merged = new Map();
   for (const row of rows) {
@@ -187,6 +195,8 @@ function buildFlowRepair(flowRow, taskRows) {
   else if (systemContinuation) nextStep = "completed";
   else if (hasFinalOutput) nextStep = "completed";
   else if (repairDeliveryText) nextStep = "completed";
+  else nextStep = "blocked";
+  const missingVisibleReplyReason = buildMissingVisibleReplyReason(currentState, childTasks);
   const nextStatus = nextStep === "completed" ? "succeeded" : (nextStep === "blocked" ? "failed" : "waiting");
   const nextStateJson = {
     ...currentState,
@@ -197,7 +207,7 @@ function buildFlowRepair(flowRow, taskRows) {
     childSessions: childTasks.map((task) => task.childSessionKey).filter(Boolean),
     receivedEvidenceCount: countEvidence(childTasks),
     lastFailureReason: nextStep === "blocked"
-      ? normalizeString(currentState.lastFailureReason) || childTasks.find((task) => isFailurePhase(task.phase))?.progressSummary || "child task failed"
+      ? normalizeString(currentState.lastFailureReason) || childTasks.find((task) => isFailurePhase(task.phase))?.progressSummary || missingVisibleReplyReason
       : "",
     finalOutput: nextStep === "completed" && repairDeliveryText
       ? {

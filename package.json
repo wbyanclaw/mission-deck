@@ -1,6 +1,6 @@
 {
   "name": "mission-deck-install",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Agent-first installer package for the mission-deck OpenClaw plugin.",
   "license": "MIT",
   "type": "module",

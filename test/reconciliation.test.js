@@ -302,6 +302,58 @@ test("agent_end reconciles child outcome when parent link is only available from
   assert.equal(attached[0].parentRunId, "flow-parent");
 });
 
+test("agent_end blocks mission-flow roots that end without any visible reply", async () => {
+  const runtimeRuns = new Map([
+    ["run-root-1", {
+      engineeringTask: true,
+      entryMode: "mission-flow",
+      flowId: "flow-root-1",
+      flowRevision: 2,
+      flowCurrentStep: "reviewing",
+      flowStatus: "waiting",
+      childTasks: [],
+      childTaskIds: [],
+      lastExternalMessage: "",
+      lastBlockReason: "",
+      userVisibleMessageSent: false
+    }]
+  ]);
+  const transitions = [];
+  const handler = createAgentEndHandler({
+    dashboard: {
+      attachChildOutcome: async () => {},
+      trackActiveRun() {},
+      archiveRun: async () => {},
+      flush: async () => {}
+    },
+    runtimeRuns,
+    isSyntheticAnnounceRun: () => false,
+    getBestEffortParentLinkFromRegistry: () => null,
+    findParentRunByChildLink: () => null,
+    reviveParentRun: () => null,
+    applyChildOutcomeToParent: () => {},
+    countOpenChildTasks: () => 0,
+    buildCollaborationRequirementReason: () => "",
+    lacksRequiredCollaborationEvidence: () => false,
+    shouldFinishParent: () => false,
+    shouldRetainRuntimeState: () => true,
+    syncFlowSnapshot: () => {},
+    transitionFlow: (_taskFlow, _state, action, payload) => {
+      transitions.push({ action, payload });
+    },
+    ensureFlowBound: () => ({}),
+    deleteBestEffortChildLink: () => {}
+  });
+
+  await handler({}, { agentId: "main", runId: "run-root-1", sessionKey: "agent:main:root" });
+
+  assert.equal(transitions.length, 1);
+  assert.equal(transitions[0].action, "setWaiting");
+  assert.equal(transitions[0].payload.currentStep, "blocked");
+  assert.equal(transitions[0].payload.blockedSummary, "agent run ended without sending a visible reply");
+  assert.equal(runtimeRuns.get("run-root-1").lastBlockReason, "agent run ended without sending a visible reply");
+});
+
 test("runtime registry falls back to persisted child link lookup when memory link is missing", () => {
   const registry = createRuntimeRegistry({
     runtimeRuns: new Map(),
@@ -407,4 +459,193 @@ test("parent reconciliation recomputes open-child count from latest flow snapsho
   assert.equal(parentState.childTasks[1].phase, "completed");
   assert.equal(parentState.childTasks[1].progressSummary, "reviewer finished");
   assert.equal(transitions[0].payload.currentStep, "reviewing");
+});
+
+test("parent reconciliation ignores duplicate terminal child outcomes for the same task", () => {
+  const transitions = [];
+  const parentState = {
+    flowId: "flow-1",
+    flowRevision: 5,
+    sessionKey: "agent:dispatcher:main",
+    entryMode: "mission-flow",
+    orchestrationMode: "delegate_once",
+    durable: {
+      state: "reviewing",
+      childTasks: [
+        {
+          taskId: "task-1",
+          childSessionKey: "agent:builder:subagent:1",
+          childRunId: "child-run-1",
+          phase: "completed",
+          progressSummary: "builder finished"
+        }
+      ],
+      receivedEvidenceCount: 1
+    },
+    childTasks: [
+      {
+        taskId: "task-1",
+        childSessionKey: "agent:builder:subagent:1",
+        childRunId: "child-run-1",
+        phase: "completed",
+        progressSummary: "builder finished"
+      }
+    ],
+    childTaskIds: ["task-1"],
+    timelineEvents: [],
+    activityTrail: [],
+    lastExternalMessage: "",
+    lastBlockReason: "",
+    flowCurrentStep: "reviewing",
+    flowStatus: "waiting"
+  };
+  const flow = {
+    flowId: "flow-1",
+    revision: 5,
+    status: "waiting",
+    currentStep: "reviewing",
+    stateJson: {
+      state: "reviewing",
+      childTasks: [
+        {
+          taskId: "task-1",
+          childSessionKey: "agent:builder:subagent:1",
+          childRunId: "child-run-1",
+          phase: "completed",
+          progressSummary: "builder finished"
+        }
+      ],
+      receivedEvidenceCount: 1
+    },
+    tasks: []
+  };
+
+  const result = applyChildOutcomeToParent({
+    api: {
+      runtime: {
+        taskFlow: {
+          bindSession() {
+            return {
+              get(flowId) {
+                return flowId === "flow-1" ? flow : null;
+              }
+            };
+          }
+        }
+      }
+    },
+    dashboard: { trackActiveRun() {} },
+    countOpenChildTasks,
+    shouldFinishParent() {
+      return false;
+    },
+    transitionFlow(_taskFlow, _state, action) {
+      transitions.push(action);
+      return { applied: true };
+    },
+    updateDurableChildTask
+  }, parentState, "dispatcher", {
+    childTaskId: "task-1",
+    childSessionKey: "agent:builder:subagent:1",
+    childRunId: "child-run-2",
+    childAgentId: "builder",
+    phase: "completed",
+    summary: "已收到最新进展",
+    updatedAt: "2026-04-23T06:03:36.309Z"
+  }, { sessionKey: "agent:dispatcher:main" });
+
+  assert.equal(result.duplicate, true);
+  assert.equal(transitions.length, 0);
+  assert.equal(parentState.childTasks.length, 1);
+  assert.equal(parentState.childTasks[0].childRunId, "child-run-1");
+  assert.equal(parentState.timelineEvents.length, 0);
+});
+
+test("agent_end does not keep completed mission-lite child runs in dashboard activeRuns", async () => {
+  const runtimeRuns = new Map([
+    ["child-run-finished-1", {
+      engineeringTask: true,
+      entryMode: "mission-lite",
+      parentRunId: "run-parent-1",
+      parentFlowId: "flow-parent-1",
+      parentTaskId: "task-parent-1",
+      parentAgentId: "main",
+      lastExternalMessage: "",
+      lastBlockReason: ""
+    }]
+  ]);
+  let tracked = 0;
+  const handler = createAgentEndHandler({
+    dashboard: {
+      attachChildOutcome: async () => {},
+      trackActiveRun() { tracked += 1; },
+      archiveRun: async () => {},
+      flush: async () => {}
+    },
+    runtimeRuns,
+    isSyntheticAnnounceRun: () => false,
+    getBestEffortParentLinkFromRegistry: () => null,
+    findParentRunByChildLink: () => null,
+    reviveParentRun: () => null,
+    applyChildOutcomeToParent: () => ({ duplicate: false }),
+    countOpenChildTasks: () => 0,
+    buildCollaborationRequirementReason: () => "",
+    lacksRequiredCollaborationEvidence: () => false,
+    shouldFinishParent: () => false,
+    shouldRetainRuntimeState: () => false,
+    syncFlowSnapshot: () => {},
+    transitionFlow: () => {},
+    ensureFlowBound: () => null,
+    deleteBestEffortChildLink: () => {}
+  });
+
+  await handler({}, { agentId: "coder", runId: "child-run-finished-1", sessionKey: "agent:coder:subagent:1" });
+
+  assert.equal(tracked, 0);
+  assert.equal(runtimeRuns.has("child-run-finished-1"), false);
+});
+
+test("agent_end archives direct mission-lite runs so they survive dashboard rebuilds", async () => {
+  const runtimeRuns = new Map([
+    ["direct-run-1", {
+      engineeringTask: true,
+      entryMode: "mission-lite",
+      parentRunId: "",
+      parentFlowId: "",
+      parentTaskId: "",
+      parentAgentId: "",
+      promptText: "给主人产出比赛产品方案",
+      normalizedPromptText: "给主人产出比赛产品方案",
+      lastExternalMessage: "已整理成产品方案。",
+      lastBlockReason: ""
+    }]
+  ]);
+  let archived = 0;
+  const handler = createAgentEndHandler({
+    dashboard: {
+      attachChildOutcome: async () => {},
+      trackActiveRun() {},
+      archiveRun: async () => { archived += 1; },
+      flush: async () => {}
+    },
+    runtimeRuns,
+    isSyntheticAnnounceRun: () => false,
+    getBestEffortParentLinkFromRegistry: () => null,
+    findParentRunByChildLink: () => null,
+    reviveParentRun: () => null,
+    applyChildOutcomeToParent: () => ({ duplicate: false }),
+    countOpenChildTasks: () => 0,
+    buildCollaborationRequirementReason: () => "",
+    lacksRequiredCollaborationEvidence: () => false,
+    shouldFinishParent: () => false,
+    shouldRetainRuntimeState: () => false,
+    syncFlowSnapshot: () => {},
+    transitionFlow: () => {},
+    ensureFlowBound: () => null,
+    deleteBestEffortChildLink: () => {}
+  });
+
+  await handler({}, { agentId: "coder", runId: "direct-run-1", sessionKey: "agent:coder:feishu:direct:u1" });
+
+  assert.equal(archived, 1);
 });

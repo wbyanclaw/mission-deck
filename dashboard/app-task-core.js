@@ -2,7 +2,7 @@ import {
   TARGET_KIND_TEXT,
   sortByTimestampAsc,
   truncateText
-} from "./app-utils.js?v=dashboard-live-20260422-4";
+} from "./app-utils.js?v=dashboard-live-20260424202409-g32df9";
 import { chooseCanonicalFlowFragment, getFlowFragmentTimestamp } from "./dashboard-flow-canonical.js";
 
 function getRunTimestamp(run) {
@@ -85,6 +85,18 @@ function isHeartbeatRun(run) {
   );
 }
 
+function isInternalTaskPrompt(value) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return (
+    /^\[peer:/i.test(text) ||
+    /^\[cron:/i.test(text) ||
+    /^\[(Mon|Tue|Wed|Thu|Fri|Sat|Sun)\s+\d{4}-\d{2}-\d{2}/i.test(text) ||
+    /^已接单\b/i.test(text) ||
+    /招钳派工|招钳已接单/i.test(text)
+  );
+}
+
 function isSystemPromptText(value) {
   const promptText = String(value || "").toLowerCase();
   return (
@@ -114,7 +126,10 @@ function looksLikeSystemSlug(value) {
 
 function hasMeaningfulUserPrompt(run) {
   const promptText = String(run?.initialUserPrompt || run?.promptText || "").trim();
-  return Boolean(promptText) && !isSystemPromptText(promptText) && !looksLikeSystemSlug(promptText);
+  return Boolean(promptText) &&
+    !isSystemPromptText(promptText) &&
+    !looksLikeSystemSlug(promptText) &&
+    !isInternalTaskPrompt(promptText);
 }
 
 function isInternalOnlyCompletionText(value) {
@@ -234,6 +249,7 @@ function buildFlowCentricRun(groupRuns) {
     initialUserPrompt: hasMeaningfulUserPrompt(promptSource)
       ? String(promptSource?.initialUserPrompt || promptSource?.promptText || "")
       : "",
+    originSummary: extractOriginSummary(promptSource || primary),
     childTasks,
     childTaskIds: childTasks.map((task) => String(task.taskId || "").trim()).filter(Boolean),
     flowTaskSummary: summarizeMergedChildTasks(childTasks),
@@ -273,9 +289,10 @@ export function getBlockersForRun(run, data) {
 export function getEffectiveStatus(run) {
   const status = String(run?.status || "").toLowerCase();
   if (status === "completed" || status === "blocked") return status;
+  if (String(run?.lastBlockReason || "").trim()) return "blocked";
   const step = String(run?.flowCurrentStep || "").toLowerCase();
-  if (step === "reviewing") return "reviewing";
   if (step === "blocked" || step === "failed" || step === "cancelled") return "blocked";
+  if (step === "reviewing") return "reviewing";
   if (step === "waiting_child" || step === "awaiting_user_input") return "waiting";
   if (step === "delegated") return "delegated";
   if (step === "routing" || step === "planned" || step === "intake" || step === "finalizing") return "coordinating";
@@ -293,6 +310,15 @@ export function getLatestBlocker(run, data) {
     .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")))[0] || null;
 }
 
+export function getBlockerDetails(run, data) {
+  const latestBlocker = getLatestBlocker(run, data);
+  return {
+    reason: String(latestBlocker?.reason || run?.lastBlockReason || "").trim(),
+    blockedAt: String(latestBlocker?.timestamp || run?.updatedAt || "").trim(),
+    blockedBy: String(latestBlocker?.agentId || run?.agentId || "").trim()
+  };
+}
+
 export function getRouteLabel(target) {
   return TARGET_KIND_TEXT[target?.targetKind] || "正在进行内部协作";
 }
@@ -300,7 +326,11 @@ export function getRouteLabel(target) {
 export function humanizeLatestDetail(run, latestBlocker) {
   const effectiveStatus = getEffectiveStatus(run);
   if (effectiveStatus === "completed") return "已完成交付。";
-  if (effectiveStatus === "blocked") return "任务当前被阻塞，需要决策或新的输入。";
+  if (effectiveStatus === "blocked") {
+    if (latestBlocker?.reason) return latestBlocker.reason;
+    if (run.lastBlockReason) return run.lastBlockReason;
+    return "任务当前被阻塞，需要决策或新的输入。";
+  }
   if (effectiveStatus === "reviewing") return "主控正在汇总最终结果。";
   if (effectiveStatus === "waiting") return "等待子任务反馈或新的输入。";
   if (run.flowWaitSummary) return run.flowWaitSummary;
@@ -358,8 +388,8 @@ export function buildTaskCards(data) {
     .filter((run) => !shouldHideSystemContinuationCard(run))
     .filter((run) => {
       const promptText = String(run.promptText || "").trim();
-      const hasMeaningfulPrompt = promptText && !isSystemPromptText(promptText);
-      return hasMeaningfulPrompt || Boolean(run.lastExternalMessage) || (Array.isArray(run.childTasks) && run.childTasks.length > 0);
+      const hasMeaningfulPrompt = promptText && !isSystemPromptText(promptText) && !isInternalTaskPrompt(promptText);
+      return hasMeaningfulPrompt;
     })
     .sort((a, b) => getDisplayTimestamp(b).localeCompare(getDisplayTimestamp(a)));
 }
@@ -381,12 +411,21 @@ export function stripPromptMetadata(value) {
     .trim();
 }
 
-export function deriveTaskSummary(run) {
+function normalizeTaskPromptLine(line) {
+  return String(line || "")
+    .replace(/^\[peer:[^\]]+\]:\s*/i, "")
+    .replace(/^\[cron:[^\]]+\]\s*/i, "")
+    .replace(/^(?!\[)[^:\n]{2,64}:\s*/u, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractOriginSummary(run) {
   const promptText = String(run?.initialUserPrompt || run?.promptText || "");
   const raw = stripPromptMetadata(promptText);
   const firstMeaningfulLine = raw
     .split(/\n+/)
-    .map((line) => line.trim())
+    .map((line) => normalizeTaskPromptLine(line))
     .find((line) =>
       line &&
       !/^```/.test(line) &&
@@ -394,7 +433,11 @@ export function deriveTaskSummary(run) {
       !/^(conversation info|sender|recipient|system)/i.test(line)
     );
   const fallback = isSystemPromptText(promptText) ? "异步结果续跑任务" : "";
-  return truncateText(firstMeaningfulLine || raw || run.lastExternalMessage || fallback || "任务处理中", 52);
+  return truncateText(firstMeaningfulLine || normalizeTaskPromptLine(raw) || fallback || "任务处理中", 52);
+}
+
+export function deriveTaskSummary(run) {
+  return truncateText(String(run?.originSummary || "").trim() || extractOriginSummary(run), 52);
 }
 
 export function getAgentDisplayName(data, agentId) {
@@ -487,28 +530,66 @@ export function getCurrentProgress(run, data) {
     humanizeLatestDetail(run, getLatestBlocker(run, data));
 }
 
+export function getNextAction(run, data) {
+  const effectiveStatus = getEffectiveStatus(run);
+  const explicitNextAction = String(run?.chainAssessment?.nextAction || "").trim();
+  if (explicitNextAction) return explicitNextAction;
+  if (effectiveStatus === "completed") return "无需处理。";
+  if (effectiveStatus === "waiting") {
+    const step = String(run?.flowCurrentStep || "").toLowerCase();
+    if (step === "waiting_child") {
+      return "检查子任务回执；若子任务已完成但父链未更新，重放 child outcome 或执行 repair。";
+    }
+    if (step === "awaiting_user_input") {
+      return "等待用户补充输入后继续。";
+    }
+    return "继续等待最新输入或执行结果。";
+  }
+  if (effectiveStatus === "blocked") {
+    const reason = String(run?.lastBlockReason || getLatestBlocker(run, data)?.reason || "").toLowerCase();
+    if (reason.includes("without sending a visible reply")) {
+      return "补发最终回复；若不应再回复用户，则明确终止并归档。";
+    }
+    if (reason.includes("routing first")) {
+      return "先完成 routing，再继续读写或委派。";
+    }
+    if (reason.includes("collaboration evidence")) {
+      return "补齐独立 teammate evidence，或改成单人执行后重新收口。";
+    }
+    return "先处理阻塞原因，再决定重试、补发回复或终止。";
+  }
+  if (effectiveStatus === "reviewing") {
+    return "检查是否已有最终回复；如已有则完成收口，否则补出明确阻塞原因。";
+  }
+  return "继续推进当前步骤，直到形成最终回复或明确阻塞。";
+}
+
 export function buildTaskChainFacts(run, data) {
   const latestDispatch = getLatestDispatch(run, data);
   const flowRuns = Array.isArray(run.flowRunIds) ? run.flowRunIds.length : 1;
   const childTotal = Array.isArray(run.childTasks) ? run.childTasks.length : 0;
   const deliveredCount = (Array.isArray(run.childTasks) ? run.childTasks : []).filter((task) => isTerminalChildPhase(task.phase)).length;
+  const blockerDetails = getBlockerDetails(run, data);
   const facts = [
     { label: "用户问句", value: deriveTaskSummary(run) },
     { label: "Coordinator", value: getAgentDisplayName(data, run.agentId) },
     { label: "当前处理人", value: getAgentDisplayName(data, getCurrentOwner(run, data)) },
     { label: "Task Route", value: getRouteLabel(latestDispatch?.target) },
     { label: "Current Step", value: getCurrentProgress(run, data) },
+    { label: "下一步", value: getNextAction(run, data) },
     { label: "Flow 续跑", value: `${flowRuns} 次` },
     { label: "子任务证据", value: childTotal > 0 ? `${deliveredCount}/${childTotal}` : "-" }
   ];
+  if (getEffectiveStatus(run) === "blocked") {
+    facts.push({ label: "阻塞责任", value: getAgentDisplayName(data, blockerDetails.blockedBy || run.agentId) });
+    facts.push({ label: "阻塞时间", value: blockerDetails.blockedAt || "-" });
+    facts.push({ label: "阻塞原因", value: blockerDetails.reason || "任务当前被阻塞，需要进一步处理。" });
+  }
   if (run.chainAssessment?.summary) {
     facts.push({ label: "链路体检", value: run.chainAssessment.summary });
   }
   if (run.chainAssessment?.missing) {
     facts.push({ label: "当前缺口", value: run.chainAssessment.missing });
-  }
-  if (run.chainAssessment?.nextAction) {
-    facts.push({ label: "下一步", value: run.chainAssessment.nextAction });
   }
   return facts;
 }

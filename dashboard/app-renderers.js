@@ -4,25 +4,22 @@ import {
   fmtTime,
   getStatusText,
   renderEmpty
-} from "./app-utils.js?v=dashboard-live-20260422-4";
+} from "./app-utils.js?v=dashboard-live-20260424202409-g32df9";
 import {
   buildTaskCards,
   buildTaskChain,
-  buildTaskChainFacts,
   deriveTaskSummary,
+  getAgentDisplayName,
+  getCurrentOwner,
+  getCurrentProgress,
   getEffectiveStatus,
-} from "./app-task-core.js?v=dashboard-live-20260422-4";
-import {
-  buildSupervisorFacts,
-  buildWorkTreeRows,
-  getSupervisorSummary,
-  needsTextToggle
-} from "./app-timeline-models.js?v=dashboard-live-20260422-4";
+  humanizeLatestDetail,
+} from "./app-task-core.js?v=dashboard-live-20260424202409-g32df9";
 import {
   buildGraphModel,
   formatGraphNodeTitle,
   getAgentStateTone
-} from "./app-graph-models.js?v=dashboard-live-20260422-4";
+} from "./app-graph-models.js?v=dashboard-live-20260424202409-g32df9";
 
 export function renderHero(el, data) {
   const agents = Array.isArray(data.agentRoster) ? data.agentRoster : [];
@@ -34,11 +31,13 @@ export function renderHero(el, data) {
 export function renderSummary(el, data) {
   const summary = data.summary || {};
   const tasks = buildTaskCards(data);
+  const directSessions = Array.isArray(data.directSessions) ? data.directSessions : [];
   const blocked = tasks.filter((task) => getEffectiveStatus(task) === "blocked").length;
   const waiting = tasks.filter((task) => getEffectiveStatus(task) === "waiting").length;
   const delegated = tasks.filter((task) => (task.flowTaskSummary?.total || 0) > 0 || (task.childTaskIds || []).length > 0).length;
   const cards = [
     { title: "活跃任务", value: `${tasks.length}`, note: `${delegated} 项涉及多 Agent 协作` },
+    { title: "直接会话", value: `${directSessions.length}`, note: "直接找 Agent 的任务，单独展示不混入 TaskFlow" },
     { title: "处理中", value: `${waiting}`, note: "等待反馈、确认或下一步动作" },
     { title: "需要关注", value: `${blocked}`, note: "存在阻塞，可能需要人工介入" },
     { title: "近期完成率", value: `${summary.successRate || 0}%`, note: "按最近任务收口结果统计" }
@@ -125,30 +124,39 @@ export function renderTimeline(el, uiState, data) {
   if (!tasks.length) return renderEmpty(el.timeline, "当前没有可展示的活跃 TaskFlow 任务。");
 
   el.timeline.innerHTML = tasks.map((run, index) => {
-    const worktree = buildWorkTreeRows(run, data);
     const taskSummary = deriveTaskSummary(run);
     const status = getEffectiveStatus(run);
     const chain = buildTaskChain(run, data);
-    const chainFacts = buildTaskChainFacts(run, data);
-    const supervisorFacts = buildSupervisorFacts(run);
-    const supervisorSummary = getSupervisorSummary(run);
+    const currentOwner = getAgentDisplayName(data, getCurrentOwner(run, data));
+    const currentProgress = getCurrentProgress(run, data);
+    const childEvidence = Array.isArray(run.childTasks) && run.childTasks.length > 0
+      ? `${(run.childTasks || []).filter((task) => ["reported", "succeeded", "success", "completed", "done", "delivered", "failed", "blocked", "cancelled", "timed_out", "timeout"].includes(String(task?.phase || "").toLowerCase())).length}/${run.childTasks.length}`
+      : "-";
+    const compactFacts = [
+      { label: "主控", value: getAgentDisplayName(data, run.agentId) },
+      { label: "当前处理人", value: currentOwner },
+      { label: "子任务证据", value: childEvidence }
+    ];
+    const detailHref = `./detail.html?type=task&flowId=${encodeURIComponent(String(run.flowId || ""))}`;
     return `
-      <details
-        class="task-card worktree-card"
-        data-run-id="${esc(run.runId || "")}"
-        ${uiState.taskOpen.has(run.runId) || (index === 0 && uiState.taskOpen.size === 0) ? "open" : ""}
-        >
-        <summary class="task-summary">
-          <div class="task-head">
-            <div>
-              <div class="task-time">任务 ${index + 1} · ${esc(fmtTime(run.userAskedAt || run.startedAt || run.updatedAt))}</div>
-              <h3>${esc(taskSummary)}</h3>
-            </div>
-            <div class="task-status ${esc(status)}">${esc(getStatusText(status))}</div>
+      <article class="task-card worktree-card" data-run-id="${esc(run.runId || "")}">
+        <div class="task-head">
+          <div>
+            <div class="task-time">任务 ${index + 1} · ${esc(fmtTime(run.userAskedAt || run.startedAt || run.updatedAt))}</div>
+            <h3>${esc(taskSummary)}</h3>
           </div>
-        </summary>
+          <div class="task-status ${esc(status)}">${esc(getStatusText(status))}</div>
+        </div>
         <section class="task-chain">
-          <div class="chain-title">任务链路</div>
+          <div class="task-compact-grid">
+            ${compactFacts.map((item) => `
+              <div class="task-kpi">
+                <div class="task-kpi-label">${esc(item.label)}</div>
+                <div class="task-kpi-value">${esc(item.value || "-")}</div>
+              </div>
+            `).join("")}
+          </div>
+          <div class="task-current-progress">${esc(currentProgress || humanizeLatestDetail(run))}</div>
           <div class="chain-path">
             ${chain.map((node, chainIndex) => `
               ${chainIndex > 0 ? `<span class="chain-arrow">→</span>` : ""}
@@ -158,50 +166,88 @@ export function renderTimeline(el, uiState, data) {
               </span>
             `).join("")}
           </div>
-          <div class="chain-facts">
-            ${chainFacts.map((item) => `
-              <div class="chain-fact">
-                <div class="chain-fact-label">${esc(item.label)}</div>
-                <div class="chain-fact-value">${esc(item.value || "-")}</div>
-              </div>
-            `).join("")}
+          <div class="task-link-row">
+            <a class="detail-link" href="${esc(detailHref)}" target="_blank" rel="noopener noreferrer">查看完整链路</a>
           </div>
-          ${supervisorSummary ? `
-            <div class="supervisor-panel ${run.supervisorPending ? "pending" : ""}">
-              <div class="supervisor-head">
-                <div>
-                  <div class="chain-title">督办状态</div>
-                  <div class="supervisor-title">${esc(run.supervisorPending ? "Supervisor 已介入" : "最近一次督办记录")}</div>
-                </div>
-                <div class="supervisor-pill">${esc(supervisorSummary.owner)}</div>
-              </div>
-              <div class="supervisor-reason">${esc(supervisorSummary.reason)}</div>
-              <div class="supervisor-facts">
-                ${supervisorFacts.map((item) => `
-                  <div class="supervisor-fact">
-                    <div class="chain-fact-label">${esc(item.label)}</div>
-                    <div class="chain-fact-value">${esc(item.value || "-")}</div>
-                  </div>
-                `).join("")}
-              </div>
-            </div>
-          ` : ""}
         </section>
-        <div class="worktree-body">
-          <div class="worktree-rail">
-            ${worktree.length ? worktree.map((item) => `
-              <article class="worktree-node ${esc(item.tone || "")}">
-                <div class="worktree-dot"></div>
-                <div class="worktree-content">
-                  <div class="worktree-meta">${esc(item.role)} · ${esc(item.owner || "-")} · ${esc(fmtTime(item.timestamp))}</div>
-                  <div class="worktree-text ${needsTextToggle(item.text) ? "is-collapsed" : ""}">${esc(item.text)}</div>
-                  ${needsTextToggle(item.text) ? `<button type="button" class="worktree-toggle" aria-expanded="false">展开</button>` : ""}
-                </div>
-              </article>
-            `).join("") : `<div class="empty-inline">暂时还没有时间线记录。</div>`}
-          </div>
-        </div>
-      </details>
+      </article>
     `;
   }).join("");
+}
+
+export function renderDirectSessions(el, uiState, data) {
+  const allSessions = Array.isArray(data.directSessions) ? data.directSessions : [];
+  const sessions = allSessions.filter((run) => uiState.visibleSessionKinds.has(String(run.sessionKind || "").toLowerCase() || "direct"));
+  el.directCount.textContent = `${sessions.length} / ${allSessions.length} 项`;
+  if (!sessions.length) return renderEmpty(el.directSessions, "当前没有需要单独展示的直接会话。");
+
+  const groups = new Map();
+  for (const run of sessions) {
+    const agentId = String(run.agentId || "unknown");
+    const bucket = groups.get(agentId) || [];
+    bucket.push(run);
+    groups.set(agentId, bucket);
+  }
+  const roster = Array.isArray(data.agentRoster) ? data.agentRoster : [];
+  const order = (agentId) => {
+    const match = roster.find((item) => item.agentId === agentId);
+    return Number(match?.orderIndex ?? 9999);
+  };
+  const label = (agentId) => {
+    const match = roster.find((item) => item.agentId === agentId);
+    return match?.displayName || agentId;
+  };
+  const directTitle = (run) => {
+    if (run.sessionTitle) return run.sessionTitle;
+    const latestUserTurn = [...(Array.isArray(run.timelineEvents) ? run.timelineEvents : [])]
+      .filter((item) => item?.role === "用户发起" || item?.role === "用户追问")
+      .sort((a, b) => String(b.timestamp || "").localeCompare(String(a.timestamp || "")))[0];
+    if (latestUserTurn?.text) return deriveTaskSummary({ promptText: latestUserTurn.text });
+    return deriveTaskSummary(run);
+  };
+  const kindLabel = (run) => {
+    const kind = String(run.sessionKind || "").toLowerCase();
+    if (kind === "heartbeat") return "心跳";
+    if (kind === "cron") return "定时";
+    if (kind === "system") return "系统";
+    if (kind === "empty") return "回执";
+    return "直聊";
+  };
+  el.directSessions.innerHTML = Array.from(groups.entries())
+    .sort((a, b) => order(a[0]) - order(b[0]) || a[0].localeCompare(b[0]))
+    .map(([agentId, runs]) => `
+      <article class="task-card direct-agent-card">
+        <div class="task-head">
+          <div>
+            <div class="task-time">会话状态</div>
+            <h3>${esc(label(agentId))}</h3>
+          </div>
+          <div class="direct-group-count">${esc(String(runs.length))} 个 session</div>
+        </div>
+        <div class="direct-session-list">
+          ${runs
+            .sort((a, b) => String(b.updatedAt || "").localeCompare(String(a.updatedAt || "")))
+            .map((run) => {
+              const status = getEffectiveStatus(run);
+              const summaryLine = directTitle(run);
+              const detailHref = `./detail.html?type=session&sessionKey=${encodeURIComponent(String(run.sessionKey || ""))}`;
+              return `
+                <article class="direct-session-block">
+                  <div class="direct-session-head">
+                    <div class="direct-session-main">
+                      <div class="direct-session-summary-line">${esc(summaryLine)}</div>
+                      <div class="direct-meta">${esc(fmtTime(run.userAskedAt || run.startedAt || run.updatedAt))}</div>
+                    </div>
+                    <div class="direct-session-side">
+                      <span class="session-kind">${esc(kindLabel(run))}</span>
+                      <span class="task-status ${esc(status)}">${esc(getStatusText(status))}</span>
+                      <a class="detail-link" href="${esc(detailHref)}" target="_blank" rel="noopener noreferrer">查看完整链路</a>
+                    </div>
+                  </div>
+                </article>
+              `;
+            }).join("")}
+        </div>
+      </article>
+    `).join("");
 }

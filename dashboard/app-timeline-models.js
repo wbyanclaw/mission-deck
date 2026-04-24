@@ -3,23 +3,22 @@ import {
   needsTextToggle,
   sortTimelineDesc,
   truncateText
-} from "./app-utils.js?v=dashboard-live-20260422-4";
+} from "./app-utils.js?v=dashboard-live-20260424202409-g32df9";
 import {
-  deriveTaskSummary,
   getAgentDisplayName,
-  getLatestBlocker,
-  getLatestDispatch,
-  getDispatchesForRun,
-  getBlockersForRun,
-  getFlowStepText,
-  humanizeLatestDetail
-} from "./app-task-core.js?v=dashboard-live-20260422-4";
+  deriveTaskSummary
+} from "./app-task-core.js?v=dashboard-live-20260424202409-g32df9";
 
 export function getTimelineOwnerName(data, owner, fallbackAgentId) {
   const normalizedOwner = String(owner || "").trim();
   if (!normalizedOwner) return getAgentDisplayName(data, fallbackAgentId);
   if (normalizedOwner === "用户") return "用户";
   return getAgentDisplayName(data, normalizedOwner);
+}
+
+function isUserFacingTimelineRole(role) {
+  const normalized = String(role || "").trim();
+  return normalized === "最终回复" || normalized === "对外同步" || normalized === "用户追问";
 }
 
 export function summarizeBlocker(reason) {
@@ -40,68 +39,26 @@ export function buildWorkTreeRows(run, data) {
   }];
 
   for (const item of (Array.isArray(run.timelineEvents) ? run.timelineEvents : [])) {
+    if (!isUserFacingTimelineRole(item.role)) continue;
     rows.push({
       timestamp: item.timestamp,
       owner: getTimelineOwnerName(data, item.owner, run.agentId),
-      role: item.role === "最终回复"
-        ? "回复用户"
-        : item.role === "内部查询"
-          ? "任务拆解"
-          : item.role === "安排跟进"
-            ? "任务分配"
-            : item.role === "对外同步"
-              ? "外部同步"
-              : (item.role || "任务更新"),
+      role: item.role === "用户追问" ? "用户追问" : "模型回复",
       text: item.text || "",
       tone: item.tone || ""
     });
   }
 
-  for (const entry of getDispatchesForRun(run, data)) {
-    const targetName = getAgentDisplayName(data, entry.target?.agentId);
-    rows.push({
-      timestamp: entry.timestamp,
-      owner: getAgentDisplayName(data, entry.agentId || run.agentId),
-      role: "安排跟进",
-      text: `已交给${targetName}继续处理。`
-    });
-  }
-
-  for (const task of (run.childTasks || [])) {
-    rows.push({
-      timestamp: task.updatedAt,
-      owner: getAgentDisplayName(data, task.agentId),
-      role: "协同反馈",
-      text: task.progressSummary || task.label || "当前正在推进中"
-    });
-  }
-
-  for (const entry of getBlockersForRun(run, data)) {
-    rows.push({
-      timestamp: entry.timestamp,
-      owner: getAgentDisplayName(data, entry.agentId || run.agentId),
-      role: "异常摘要",
-      text: summarizeBlocker(entry.reason),
-      tone: "blocked"
-    });
-  }
-
   if (run.lastExternalMessage) {
-    rows.push({
-      timestamp: run.updatedAt,
-      owner: getAgentDisplayName(data, run.agentId),
-      role: "对话更新",
-      text: run.lastExternalMessage
-    });
-  }
-
-  if (rows.length === 1) {
-    rows.push({
-      timestamp: run.updatedAt || run.startedAt,
-      owner: getAgentDisplayName(data, run.agentId),
-      role: "对话更新",
-      text: "已接单，正在处理中。"
-    });
+    const hasVisibleReply = rows.some((item) => item.role === "模型回复" && item.text === run.lastExternalMessage);
+    if (!hasVisibleReply) {
+      rows.push({
+        timestamp: run.updatedAt,
+        owner: getAgentDisplayName(data, run.agentId),
+        role: "模型回复",
+        text: run.lastExternalMessage
+      });
+    }
   }
 
   const seen = new Set();
